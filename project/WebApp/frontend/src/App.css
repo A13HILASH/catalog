@@ -1,0 +1,45 @@
+/* App.css */
+body {
+  margin: 0;
+  background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+  color: #eaeaea;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.container {
+  max-width: 900px;
+  margin: 40px auto;
+  padding: 30px;
+  background: #1e1e2f;
+  border-radius: 18px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+}
+
+.search-box {
+  width: 100%;
+  padding: 12px 16px;
+  margin-bottom: 30px;
+  border-radius: 12px;
+  border: 1px solid #444;
+  background: #2b2b3d;
+  color: #fff;
+  font-size: 16px;
+  transition: all 0.3s ease;
+}
+
+.search-box:focus {
+  border-color: #00e0ff;
+  outline: none;
+  box-shadow: 0 0 8px #00e0ff60;
+}
+
+.main-layout {
+  display: flex;
+  gap: 30px;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.right-panel {
+  flex: 1;
+}

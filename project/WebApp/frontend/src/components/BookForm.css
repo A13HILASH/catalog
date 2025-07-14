@@ -1,0 +1,38 @@
+.book-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 30px;
+}
+
+.book-form input {
+  padding: 10px 14px;
+  flex: 1;
+  font-size: 16px;
+  background-color: #2b2b3d;
+  color: #fff;
+  border: 1px solid #444;
+  border-radius: 10px;
+}
+
+.book-form input:focus {
+  border-color: #00ffa1;
+  box-shadow: 0 0 6px #00ffa150;
+  outline: none;
+}
+
+.book-form button {
+  padding: 10px 20px;
+  background: linear-gradient(to right, #00c6ff, #0072ff);
+  color: white;
+  font-weight: bold;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.book-form button:hover {
+  transform: scale(1.05);
+  background: linear-gradient(to right, #0072ff, #00c6ff);
+}
