@@ -1,190 +1,211 @@
-import React, { useState } from 'react';
+// CohereChatbot.jsx
+import React, { useState, useRef, useEffect } from 'react';
 import { addBook, updateBook, deleteBook } from '../services/bookService';
 import { callCohere } from './cohereUtils';
 import './chatbot.css';
 
 function CohereChatbot({ books, loadBooks }) {
   const [messages, setMessages] = useState([]);
+
   const [input, setInput] = useState('');
+  const [localBooks, setLocalBooks] = useState(books);
+  const chatBoxRef = useRef(null);
 
   const helpReplies = {
-    add: 'To add a book, type: Add book titled "Book Name" by Author Name, published in 2020.',
+    add: 'To add a book, type: Add book titled "Book Name" by Author Name in Genre, published in 2020.',
     delete: 'To delete a book, type: Delete book titled "Book Name" or by author "Author Name".',
-    update: 'To update a book, say: Change the title of "Old Title" to "New Title" or Update publication year of "Book Name" to 2020.',
-    search: 'To search for books, type: Find books by "Author Name" or books published after 2000.'
+    update: 'To update a book, say: Change the title of "Old Title" to "New Title" or update genre/year.',
+    search: 'To search for books, type: Find books by "Author Name", genre, or books published after 2000.'
   };
+
+  useEffect(() => {
+    chatBoxRef.current?.scrollTo({
+      top: chatBoxRef.current.scrollHeight,
+      behavior: 'smooth'
+    });
+  }, [messages]);
+
+  useEffect(() => {
+    setLocalBooks(books);
+  }, [books]);
 
   const handleSend = async () => {
     if (!input.trim()) return;
-
     const userMessage = input.trim();
     setMessages(prev => [...prev, { role: 'user', text: userMessage }]);
     setInput('');
 
-    try {
-      const result = await callCohere(userMessage);
-      console.log("Parsed result from Cohere:", result);
-
-      const { intent, data } = result || {};
-      const title = data?.title?.trim() || '';
-      const author = data?.author?.trim() || '';
-      const year = parseInt(data?.year);
-      const query = data?.query?.toLowerCase?.() || '';
-      
-
-      // Help Queries
     
-      if (intent === 'help') {
-        const helpTopics = ['add', 'delete', 'update', 'search'];
-        const helpKeyMatches = helpTopics.filter(topic =>
-          userMessage.toLowerCase().includes(topic)
-        );
-      
-        const helpMessages = helpKeyMatches.length
-          ? helpKeyMatches.map(k => helpReplies[k])
-          : ['You can ask me how to add, delete, update, or search books.'];
-      
-        setMessages(m => [...m, { role: 'bot', text: helpMessages.join('\n') }]);
-        return;
-      }
-      
+
+    try {
+      console.log("Sending message to Cohere:", userMessage);
+      const result = await callCohere(userMessage);  
+      console.log("Parsed Cohere result:", result);
 
 
-      // Helper to find matching book
-      const matchBook = () => books.find(b =>
-        (title && b.title?.toLowerCase() === title.toLowerCase()) ||
-        (author && b.author?.toLowerCase() === author.toLowerCase()) ||
-        (!isNaN(year) && b.year === year)
-      );
+      const intentsArray = Array.isArray(result) ? result : [result];
 
-      // ADD
-      if (intent === 'add') {
-        const newBook = {
-          title: title || 'Unknown',
-          author: author || 'Unknown',
-          year: !isNaN(year) ? year : 0//new Date().getFullYear()
+      for (const { intent, data } of intentsArray) {
+        const title = data?.title?.trim() || '';
+        const author = data?.author?.trim() || '';
+        const genre = data?.genre?.trim() || '';
+        const year = parseInt(data?.year);
+        const query = data?.query?.toLowerCase?.() || '';
+        const after = data?.range?.after;
+        const before = data?.range?.before;
+        const fieldsToUpdate = data?.fieldsToUpdate;
+
+        if (intent === 'help') {
+          const helpMatches = [];
+          if (/how.*add/i.test(userMessage)) helpMatches.push('add');
+          if (/how.*delete/i.test(userMessage)) helpMatches.push('delete');
+          if (/how.*update/i.test(userMessage)) helpMatches.push('update');
+          if (/how.*(search|find|filter)/i.test(userMessage)) helpMatches.push('search');
+          if (helpMatches.length === 0 && userMessage.toLowerCase().includes('how')) helpMatches.push('search');
+
+          const helpMessages = helpMatches.length
+            ? helpMatches.map(k => helpReplies[k])
+            : ['You can ask me how to add, delete, update, or search books.'];
+
+          setMessages(m => [...m, { role: 'bot', text: helpMessages.join('\n') }]);
+          continue;
+        }
+
+        const matchBooks = () => {
+          return localBooks.filter(b => {
+            const matchesTitle = title && (!fieldsToUpdate?.title || fieldsToUpdate.title !== title)
+              ? b.title?.toLowerCase() === title.toLowerCase() : true;
+            const matchesAuthor = author && (!fieldsToUpdate?.author || fieldsToUpdate.author !== author)
+              ? b.author?.toLowerCase() === author.toLowerCase() : true;
+            const matchesYear = !isNaN(year) && (!fieldsToUpdate?.year || fieldsToUpdate.year !== year)
+              ? b.year === year : true;
+            const matchesGenre = genre && (!fieldsToUpdate?.genre || fieldsToUpdate.genre !== genre)
+              ? b.genre?.toLowerCase() === genre.toLowerCase() : true;
+            return matchesTitle && matchesAuthor && matchesYear && matchesGenre;
+          });
         };
-        await addBook(newBook);
-        setMessages(m => [...m, { role: 'bot', text: `Added: "${newBook.title}" by ${newBook.author} (${newBook.year})` }]);
-      }
 
-      // DELETE
-      else if (intent === 'delete') {
-        const book = matchBook();
-        if (book) {
-          await deleteBook(book.id);
-          setMessages(m => [...m, { role: 'bot', text: `Deleted book "${book.title}" by ${book.author}.` }]);
-        } else {
-          throw new Error('Book to delete not found.');
+        if (intent === 'add') {
+          const newBook = {
+            title: title || 'Unknown',
+            author: author || 'Unknown',
+            genre: genre || 'Unknown',
+            year: !isNaN(year) ? year : 0
+          };
+
+          const alreadyExists = localBooks.some(b =>
+            b.title?.toLowerCase() === newBook.title.toLowerCase() &&
+            b.author?.toLowerCase() === newBook.author.toLowerCase() &&
+            b.year === newBook.year
+          );
+
+          if (alreadyExists) {
+            setMessages(m => [...m, {
+              role: 'bot',
+              text: `Book "${newBook.title}" by ${newBook.author} (${newBook.year}) already exists.`
+            }]);
+          } else {
+            await addBook(newBook);
+            await loadBooks();
+            setMessages(m => [...m, {
+              role: 'bot',
+              text: `Added: "${newBook.title}" by ${newBook.author} (${newBook.year}) [${newBook.genre}]`
+            }]);
+          }
+        }
+
+        else if (intent === 'delete') {
+          const matches = matchBooks();
+          if (matches.length === 1) {
+            await deleteBook(matches[0].id);
+            await loadBooks();
+            setMessages(m => [...m, {
+              role: 'bot',
+              text: `Deleted book "${matches[0].title}" by ${matches[0].author}.`
+            }]);
+          } else if (matches.length > 1) {
+            throw new Error('Multiple books matched. Be more specific.');
+          } else {
+            throw new Error('Book to delete not found.');
+          }
+        }
+
+        else if (intent === 'update') {
+          const matches = matchBooks();
+          if (matches.length === 1) {
+            const book = matches[0];
+            const updated = {
+              id: book.id,
+              title: fieldsToUpdate?.title || book.title,
+              author: fieldsToUpdate?.author || book.author,
+              genre: fieldsToUpdate?.genre || book.genre,
+              year: fieldsToUpdate?.year !== undefined ? fieldsToUpdate.year : book.year,
+            };
+            await updateBook(book.id, updated);
+            await loadBooks();
+            setMessages(m => [...m, { role: 'bot', text: `Updated book "${updated.title}".` }]);
+          } else if (matches.length > 1) {
+            throw new Error('Multiple books matched. Be more specific.');
+          } else {
+            throw new Error('Book to update not found.');
+          }
+        }
+
+        else if (intent === 'search') {
+          const lowerTitle = title?.toLowerCase();
+          const lowerAuthor = author?.toLowerCase();
+          const lowerGenre = genre?.toLowerCase();
+          const lowerQuery = query?.toLowerCase() || '';
+          const allFieldsEmpty = !title && !author && !genre && isNaN(year) && !query && !after && !before;
+          const isListAll = lowerQuery === 'all' || lowerQuery.includes('list all');
+
+          let results = [];
+
+          if (isListAll || allFieldsEmpty) {
+            results = localBooks;
+          } else {
+            results = books.filter(b => {
+              const matchesTitle = lowerTitle ? b.title?.toLowerCase() === lowerTitle : true;
+              const matchesAuthor = lowerAuthor ? b.author?.toLowerCase().includes(lowerAuthor) : true;
+              const matchesGenre = lowerGenre ? b.genre?.toLowerCase().includes(lowerGenre) : true;
+              const matchesQuery = lowerQuery ? (
+                b.title?.toLowerCase().includes(lowerQuery) ||
+                b.author?.toLowerCase().includes(lowerQuery) ||
+                b.genre?.toLowerCase().includes(lowerQuery)
+              ) : true;
+              const matchesYear = !isNaN(year) ? b.year === year : true;
+              const matchesRange = after || before ? (
+                (after ? b.year > after : true) && (before ? b.year < before : true)
+              ) : true;
+            
+              return matchesTitle && matchesAuthor && matchesGenre && matchesQuery && matchesYear && matchesRange;
+            });
+          }            
+
+          if (results.length) {
+            const text = results.map(b => `- ${b.title} by ${b.author} (${b.year}) [${b.genre}]`).join('\n');
+            setMessages(m => [...m, { role: 'bot', text: `Found ${results.length} book(s):\n${text}` }]);
+          } else {
+            setMessages(m => [...m, { role: 'bot', text: 'No matching books found.' }]);
+          }
         }
       }
-
-     // UPDATE
-else if (intent === 'update') {
-  const book = books.find(b =>
-    (title && b.title?.toLowerCase() === title.toLowerCase()) ||
-    (author && b.author?.toLowerCase() === author.toLowerCase()) ||
-    (!isNaN(year) && b.year === year)
-  );
-
-  if (book) {
-    const updated = {
-      id: book.id,
-      title: data.fieldsToUpdate?.title || book.title,
-      author: data.fieldsToUpdate?.author || book.author,
-      year: data.fieldsToUpdate?.year !== undefined ? data.fieldsToUpdate.year : book.year,
-    };
-
-    await updateBook(book.id, updated);
-    setMessages(m => [...m, { role: 'bot', text: `Updated book "${updated.title}".` }]);
-  } else {
-    throw new Error('Book to update not found.');
-  }
-}
-
-
-// SEARCH
-else if (intent === 'search') {
-  let results = [];
-
-  const lowerQuery = query?.toLowerCase?.() || '';
-  const lowerTitleSearch = title?.toLowerCase?.() || '';
-  const lowerAuthorSearch = author?.toLowerCase?.() || '';
-  const isListAll = lowerQuery === 'all' || lowerQuery.includes('list all');
-
-  if (isListAll) {
-    results = books;
-  } else {
-    // Helper: normalize book values
-    results = books.filter(b => {
-      const lowerTitle = b.title?.toLowerCase?.() || '';
-      const lowerAuthor = b.author?.toLowerCase?.() || '';
-
-      const matchExactTitle = lowerTitleSearch && lowerTitle === lowerTitleSearch;
-      const matchStartsWithTitle = lowerQuery.includes("start") || lowerQuery.includes("begin")
-        ? lowerTitle.startsWith(lowerTitleSearch || lowerQuery)
-        : false;
-      const matchTitleIncludes = lowerQuery.includes("title") || lowerQuery.includes("having") || lowerQuery.includes("with")
-        ? lowerTitle.includes(lowerTitleSearch || lowerQuery)
-        : false;
-
-      const matchAuthor = lowerAuthorSearch && lowerAuthor.includes(lowerAuthorSearch);
-      const matchQueryAnywhere = lowerQuery && (lowerTitle.includes(lowerQuery) || lowerAuthor.includes(lowerQuery));
-      const matchYear = !isNaN(year) && b.year === year;
-
-      const after = data.range?.after;
-      const before = data.range?.before;
-      const matchRange = (() => {
-        if (!after && !before) return false;
-        if (after && before) return b.year > after && b.year < before;
-        if (after) return b.year > after;
-        if (before) return b.year < before;
-      })();
-
-
-      return (
-        matchExactTitle || // exact match (first priority)
-        matchStartsWithTitle ||
-        matchTitleIncludes ||
-        matchAuthor ||
-        matchYear ||
-        matchRange ||
-        matchQueryAnywhere
-      );
-    });
-
-    // ❗ Special: If an exact match exists, return only it
-    const exact = books.find(b => b.title?.toLowerCase() === lowerTitleSearch);
-    if (exact && !lowerQuery.includes("start") && !lowerQuery.includes("begin") && !lowerQuery.includes("having") && !lowerQuery.includes("title")) {
-      results = [exact];
-    }
-  }
-
-  const noFiltersActive =
-    !title && !author && isNaN(year) && !query && !data.range;
-
-  const finalResults = noFiltersActive ? books : results;
-
-  if (finalResults.length) {
-    const text = finalResults.map(b => `- ${b.title} by ${b.author} (${b.year})`).join('\n');
-    setMessages(m => [...m, { role: 'bot', text: `Found ${finalResults.length} book(s):\n${text}` }]);
-  } else {
-    setMessages(m => [...m, { role: 'bot', text: 'No matching books found.' }]);
-  }
-}
-
-
-      await loadBooks();
     } catch (error) {
       console.error("Error handling input:", error);
       setMessages(m => [...m, { role: 'bot', text: error.message || "Something went wrong." }]);
     }
   };
 
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      handleSend();
+    }
+  };
+
   return (
     <div className="chat-container">
       <h3>Ask something...</h3>
-      <div className="chat-box">
+      <div className="chat-box" ref={chatBoxRef}>
         {messages.map((msg, idx) => (
           <div key={idx} className={msg.role === 'user' ? 'chat-user' : 'chat-bot'}>
             <strong>{msg.role === 'user' ? 'You' : 'Bot'}:</strong> {msg.text}
@@ -195,6 +216,7 @@ else if (intent === 'search') {
         type="text"
         value={input}
         onChange={e => setInput(e.target.value)}
+        onKeyDown={handleKeyDown}
         placeholder="Type your message..."
       />
       <button onClick={handleSend}>Send</button>
@@ -203,3 +225,4 @@ else if (intent === 'search') {
 }
 
 export default CohereChatbot;
+
