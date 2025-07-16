@@ -1,0 +1,10 @@
+Visit Cohere.com
+
+Create account
+
+Goto https://dashboard.cohere.com/api-keys
+
+Copy trial api-key
+
+Paste it in .env file located at frontend/.env
+ REACT_APP_COHERE_API_KEY=api_key_here

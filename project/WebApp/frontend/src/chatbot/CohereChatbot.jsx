@@ -1,16 +1,17 @@
-// CohereChatbot.jsx
+
 import React, { useState, useRef, useEffect } from 'react';
-import { addBook, updateBook, deleteBook } from '../services/bookService';
+import { addBook, updateBook, deleteBook } from '../services/bookService'; 
 import { callCohere } from './cohereUtils';
-import './chatbot.css';
+import './chatbot.css'; 
 
 function CohereChatbot({ books, loadBooks }) {
   const [messages, setMessages] = useState([]);
-
   const [input, setInput] = useState('');
-  const [localBooks, setLocalBooks] = useState(books);
+  const [localBooks, setLocalBooks] = useState(books); // In-memory copy of books
+
   const chatBoxRef = useRef(null);
 
+  // Define help replies for different intents
   const helpReplies = {
     add: 'To add a book, type: Add book titled "Book Name" by Author Name in Genre, published in 2020.',
     delete: 'To delete a book, type: Delete book titled "Book Name" or by author "Author Name".',
@@ -18,6 +19,7 @@ function CohereChatbot({ books, loadBooks }) {
     search: 'To search for books, type: Find books by "Author Name", genre, or books published after 2000.'
   };
 
+  // Scroll to bottom of chat box on new messages
   useEffect(() => {
     chatBoxRef.current?.scrollTo({
       top: chatBoxRef.current.scrollHeight,
@@ -25,72 +27,113 @@ function CohereChatbot({ books, loadBooks }) {
     });
   }, [messages]);
 
+  // Update localBooks when prop books changes (e.g., after an API call)
   useEffect(() => {
     setLocalBooks(books);
   }, [books]);
 
   const handleSend = async () => {
-    if (!input.trim()) return;
+    if (!input.trim()) return; // Don't send empty messages
+
     const userMessage = input.trim();
     setMessages(prev => [...prev, { role: 'user', text: userMessage }]);
-    setInput('');
-
-    
+    setInput(''); // Clear input field
 
     try {
       console.log("Sending message to Cohere:", userMessage);
       const result = await callCohere(userMessage);  
       console.log("Parsed Cohere result:", result);
 
-
+      // Ensure result is an array, even if Cohere returns a single object
       const intentsArray = Array.isArray(result) ? result : [result];
 
       for (const { intent, data } of intentsArray) {
-        const title = data?.title?.trim() || '';
-        const author = data?.author?.trim() || '';
-        const genre = data?.genre?.trim() || '';
-        const year = parseInt(data?.year);
-        const query = data?.query?.toLowerCase?.() || '';
+        // --- REFINED CRITERIA EXTRACTION FOR FINDING (used by update/delete/search) ---
+        // These variables represent the *current* properties of the book we're trying to find.
+
+        // For title and author, we should ONLY use data.title and data.author for finding.
+        // If Cohere returns null for data.title, it means the original title was not extracted,
+        // and we CANNOT use fieldsToUpdate.title as it's the *new* title.
+        const titleCriteria = data?.title?.trim() || '';
+        const authorCriteria = data?.author?.trim() || '';
+        
+        // Determine genre and year criteria for FINDING the book,
+        // distinguishing from values meant for UPDATE (fieldsToUpdate).
+        // If Cohere puts the *new* genre/year in data.genre/data.year, we should NOT use it for finding.
+        let genreCriteriaForFindingBook = null;
+        let yearCriteriaForFindingBook = null;
+
+        // Logic for genreCriteriaForFindingBook
+        if (data?.genre?.trim()) {
+            // Use data.genre as a finding criterion if:
+            // 1. It's not an 'update' intent.
+            // 2. OR, if it IS an 'update' intent, but data.fieldsToUpdate.genre is UNDEFINED 
+            //    (meaning Cohere put the current genre in data.genre as a lookup key, not a new value).
+            if (intent !== 'update' || data?.fieldsToUpdate?.genre === undefined) {
+                genreCriteriaForFindingBook = data.genre.trim();
+            }
+        }
+
+        // Logic for yearCriteriaForFindingBook
+        if (data?.year !== null && !isNaN(parseInt(data.year))) {
+            const parsedYear = parseInt(data.year);
+            // Similar to genre, if it's an update and fieldsToUpdate.year is present, assume data.year is the NEW one.
+            if (intent !== 'update' || data?.fieldsToUpdate?.year === undefined) { 
+                yearCriteriaForFindingBook = parsedYear;
+            }
+        }
+       
+        // For search queries and update *new* values (these come directly from Cohere's data object)
+        const query = data?.query?.toLowerCase?.() || ''; // Generic search query (e.g., keywords, multi-authors)
         const after = data?.range?.after;
         const before = data?.range?.before;
-        const fieldsToUpdate = data?.fieldsToUpdate;
+        const fieldsToUpdate = data?.fieldsToUpdate; // The *new* values for update operations
 
+        // --- Handle Help Intent ---
         if (intent === 'help') {
           const helpMatches = [];
           if (/how.*add/i.test(userMessage)) helpMatches.push('add');
           if (/how.*delete/i.test(userMessage)) helpMatches.push('delete');
           if (/how.*update/i.test(userMessage)) helpMatches.push('update');
           if (/how.*(search|find|filter)/i.test(userMessage)) helpMatches.push('search');
-          if (helpMatches.length === 0 && userMessage.toLowerCase().includes('how')) helpMatches.push('search');
+          if (helpMatches.length === 0 && userMessage.toLowerCase().includes('how')) helpMatches.push('search'); // Generic 'how' defaults to search help
 
           const helpMessages = helpMatches.length
             ? helpMatches.map(k => helpReplies[k])
             : ['You can ask me how to add, delete, update, or search books.'];
 
           setMessages(m => [...m, { role: 'bot', text: helpMessages.join('\n') }]);
-          continue;
+          continue; // Move to next intent if multiple or finish
         }
 
-        const matchBooks = () => {
-          return localBooks.filter(b => {
-            const matchesTitle = title && (!fieldsToUpdate?.title || fieldsToUpdate.title !== title)
-              ? b.title?.toLowerCase() === title.toLowerCase() : true;
-            const matchesAuthor = author && (!fieldsToUpdate?.author || fieldsToUpdate.author !== author)
-              ? b.author?.toLowerCase() === author.toLowerCase() : true;
-            const matchesYear = !isNaN(year) && (!fieldsToUpdate?.year || fieldsToUpdate.year !== year)
-              ? b.year === year : true;
-            const matchesGenre = genre && (!fieldsToUpdate?.genre || fieldsToUpdate.genre !== genre)
-              ? b.genre?.toLowerCase() === genre.toLowerCase() : true;
-            return matchesTitle && matchesAuthor && matchesYear && matchesGenre;
+        // --- Helper function to find existing books based on refined criteria ---
+        const findBooksMatchingCriteria = (currentBooks) => {
+          return currentBooks.filter(b => {
+            const matchesTitle = titleCriteria ? b.title?.toLowerCase() === titleCriteria.toLowerCase() : true;
+            const matchesAuthor = authorCriteria ? b.author?.toLowerCase() === authorCriteria.toLowerCase() : true;
+            
+            // Use refined genreCriteriaForFindingBook
+            const matchesGenre = genreCriteriaForFindingBook ? b.genre?.toLowerCase() === genreCriteriaForFindingBook.toLowerCase() : true;
+            
+            // Use refined yearCriteriaForFindingBook
+            const matchesYear = yearCriteriaForFindingBook !== null ? b.year === yearCriteriaForFindingBook : true;
+            
+            // A book matches if all PROVIDED criteria match exactly
+            return (titleCriteria ? matchesTitle : true) &&
+                   (authorCriteria ? matchesAuthor : true) &&
+                   (genreCriteriaForFindingBook ? matchesGenre : true) && // Use refined variable
+                   (yearCriteriaForFindingBook !== null ? matchesYear : true); // Use refined variable
           });
         };
 
+        // --- Handle Add Intent (Restored Original Logic) ---
         if (intent === 'add') {
+          // Use data directly for newBook construction, applying defaults as before
           const newBook = {
-            title: title || 'Unknown',
-            author: author || 'Unknown',
-            genre: genre || 'Unknown',
-            year: !isNaN(year) ? year : 0
+            title: data?.title?.trim() || 'Unknown',
+            author: data?.author?.trim() || 'Unknown',
+            genre: data?.genre?.trim() || 'Unknown',
+            year: !isNaN(parseInt(data?.year)) ? parseInt(data.year) : 0
           };
 
           const alreadyExists = localBooks.some(b =>
@@ -105,33 +148,49 @@ function CohereChatbot({ books, loadBooks }) {
               text: `Book "${newBook.title}" by ${newBook.author} (${newBook.year}) already exists.`
             }]);
           } else {
-            await addBook(newBook);
-            await loadBooks();
-            setMessages(m => [...m, {
-              role: 'bot',
-              text: `Added: "${newBook.title}" by ${newBook.author} (${newBook.year}) [${newBook.genre}]`
-            }]);
+            try {
+              await addBook(newBook); // Send the book data to the backend
+              await loadBooks(); // Reload books to update local state after successful add
+              setMessages(m => [...m, {
+                role: 'bot',
+                text: `Added: "${newBook.title}" by ${newBook.author} (${newBook.year}) [${newBook.genre}]`
+              }]);
+            } catch (addError) {
+              console.error("Error adding book to backend:", addError);
+              // Provide a more specific error message if the backend provides one
+              const errorMessage = addError.response && addError.response.data && addError.response.data.message
+                                   ? addError.response.data.message
+                                   : addError.message || "An unexpected error occurred while adding the book.";
+              setMessages(m => [...m, {
+                role: 'bot',
+                text: `Failed to add book: ${errorMessage} Please ensure all details are valid.`
+              }]);
+            }
           }
         }
 
+        // --- Handle Delete Intent ---
         else if (intent === 'delete') {
-          const matches = matchBooks();
+          const matches = findBooksMatchingCriteria(localBooks);
           if (matches.length === 1) {
             await deleteBook(matches[0].id);
-            await loadBooks();
+            await loadBooks(); // Reload books
             setMessages(m => [...m, {
               role: 'bot',
               text: `Deleted book "${matches[0].title}" by ${matches[0].author}.`
             }]);
           } else if (matches.length > 1) {
-            throw new Error('Multiple books matched. Be more specific.');
+            const matchedTitles = matches.map(b => `"${b.title}" by ${b.author} (${b.year})`).join(', ');
+            setMessages(m => [...m, { role: 'bot', text: `Multiple books matched: ${matchedTitles}. Please be more specific.` }]);
           } else {
-            throw new Error('Book to delete not found.');
+            setMessages(m => [...m, { role: 'bot', text: 'Book to delete not found.' }]);
           }
         }
 
+        // --- Handle Update Intent ---
         else if (intent === 'update') {
-          const matches = matchBooks();
+          const matches = findBooksMatchingCriteria(localBooks);
+          console.log("Update matches for criteria:", {titleCriteria, authorCriteria, genreCriteria: genreCriteriaForFindingBook, yearCriteriaForFindingBook}, "Found:", matches.map(b => b.title)); // Debug
           if (matches.length === 1) {
             const book = matches[0];
             const updated = {
@@ -139,46 +198,107 @@ function CohereChatbot({ books, loadBooks }) {
               title: fieldsToUpdate?.title || book.title,
               author: fieldsToUpdate?.author || book.author,
               genre: fieldsToUpdate?.genre || book.genre,
-              year: fieldsToUpdate?.year !== undefined ? fieldsToUpdate.year : book.year,
+              // Only update year if fieldsToUpdate.year is specifically provided and valid
+              year: fieldsToUpdate?.year !== undefined && !isNaN(fieldsToUpdate.year) ? fieldsToUpdate.year : book.year,
             };
             await updateBook(book.id, updated);
-            await loadBooks();
+            await loadBooks(); // Reload books
             setMessages(m => [...m, { role: 'bot', text: `Updated book "${updated.title}".` }]);
           } else if (matches.length > 1) {
-            throw new Error('Multiple books matched. Be more specific.');
+            const matchedTitles = matches.map(b => `"${b.title}" by ${b.author} (${b.year})`).join(', ');
+            setMessages(m => [...m, { role: 'bot', text: `Multiple books matched: ${matchedTitles}. Please be more specific.` }]);
           } else {
-            throw new Error('Book to update not found.');
+            setMessages(m => [...m, { role: 'bot', text: 'Book to update not found.' }]);
           }
         }
 
+        // --- Handle Search Intent ---
         else if (intent === 'search') {
-          const lowerTitle = title?.toLowerCase();
-          const lowerAuthor = author?.toLowerCase();
-          const lowerGenre = genre?.toLowerCase();
-          const lowerQuery = query?.toLowerCase() || '';
-          const allFieldsEmpty = !title && !author && !genre && isNaN(year) && !query && !after && !before;
+          const lowerTitle = titleCriteria?.toLowerCase();
+          const lowerAuthor = authorCriteria?.toLowerCase(); // This will contain Cohere's parsed author, could be multi-part
+          const lowerGenre = genreCriteriaForFindingBook?.toLowerCase(); 
+          const lowerQuery = query?.toLowerCase() || ''; 
+          
+          // Check if all explicit criteria are empty AND no general query/range
+          const allFieldsEmpty = !lowerTitle && !lowerAuthor && genreCriteriaForFindingBook === null && yearCriteriaForFindingBook === null && !lowerQuery && !after && !before;
           const isListAll = lowerQuery === 'all' || lowerQuery.includes('list all');
 
           let results = [];
 
           if (isListAll || allFieldsEmpty) {
-            results = localBooks;
+            results = localBooks; // If no specific criteria, list all
           } else {
-            results = books.filter(b => {
-              const matchesTitle = lowerTitle ? b.title?.toLowerCase() === lowerTitle : true;
-              const matchesAuthor = lowerAuthor ? b.author?.toLowerCase().includes(lowerAuthor) : true;
+            let searchAuthors = []; // Authors derived from Cohere's data.author or data.query
+            let genericKeywords = []; // Keywords derived from Cohere's data.query
+
+            // Prioritize Cohere's data.author for author searches
+            if (lowerAuthor) {
+                // If data.author contains multiple names (e.g., "author1, author2"), split it
+                if (lowerAuthor.includes(',') || lowerAuthor.includes(' and ') || lowerAuthor.includes(' or ')) {
+                    searchAuthors = lowerAuthor.split(/,|\band\b|\bor\b/).map(a => a.trim()).filter(a => a);
+                } else {
+                    // Otherwise, it's a single author from data.author
+                    searchAuthors = [lowerAuthor];
+                }
+            }
+            
+            // If data.author was NOT provided by Cohere, check data.query for authors or generic keywords
+            if (!lowerAuthor && lowerQuery) {
+                const queryParts = lowerQuery.split(/,|\band\b|\bor\b/).map(p => p.trim()).filter(p => p);
+                // Heuristic: If query has multiple parts or explicitly mentions 'author', assume it's multi-author
+                if (queryParts.length > 1 || userMessage.toLowerCase().includes('author')) {
+                    searchAuthors = queryParts; // Overwrite if data.author was empty
+                } else {
+                    // Otherwise, it's a generic keyword search
+                    genericKeywords = [lowerQuery]; // Treat the whole query as a single keyword
+                }
+            }
+            // If lowerTitle is present, it's an explicit title search, don't put it in genericKeywords
+            if (lowerTitle && genericKeywords.length === 0) {
+                // If Cohere gave us a specific title, and no other generic keywords, use that title as a keyword
+                // This handles "Search book title starting with cle" where data.title="cle" and data.query=null
+                genericKeywords = [lowerTitle];
+            }
+
+
+            console.log("Searching with:", {lowerTitle, lowerAuthor, lowerGenre, lowerQuery, searchAuthors, genericKeywords, yearCriteriaForFindingBook, after, before}); // Debug search inputs
+            console.log("Current localBooks:", localBooks); // Debug current state of books
+
+            results = localBooks.filter(b => {
+              console.log("Checking book:", b.title, b.author, b.genre, b.year); // Debug book being checked
+
+              // Match by explicit title/genre criteria from Cohere's data object
+              const matchesTitle = lowerTitle ? b.title?.toLowerCase().includes(lowerTitle) : true;
               const matchesGenre = lowerGenre ? b.genre?.toLowerCase().includes(lowerGenre) : true;
-              const matchesQuery = lowerQuery ? (
-                b.title?.toLowerCase().includes(lowerQuery) ||
-                b.author?.toLowerCase().includes(lowerQuery) ||
-                b.genre?.toLowerCase().includes(lowerQuery)
-              ) : true;
-              const matchesYear = !isNaN(year) ? b.year === year : true;
+              
+              // Author matching: If searchAuthors list is populated, check if any match. Otherwise, it's true.
+              const matchesAnySearchAuthor = searchAuthors.length > 0 ?
+                                             searchAuthors.some(sa => b.author?.toLowerCase().includes(sa)) :
+                                             true; 
+
+              // Generic keyword matching (OR logic: matches keyword in title OR genre)
+              const matchesGenericKeyword = genericKeywords.length > 0 ?
+                                            genericKeywords.some(kw => 
+                                                b.title?.toLowerCase().includes(kw) || 
+                                                b.genre?.toLowerCase().includes(kw)
+                                            ) : true;
+              
+              // Year matching
+              const matchesYear = yearCriteriaForFindingBook !== null ? b.year === yearCriteriaForFindingBook : true;
+              
+              // Range matching
               const matchesRange = after || before ? (
                 (after ? b.year > after : true) && (before ? b.year < before : true)
               ) : true;
             
-              return matchesTitle && matchesAuthor && matchesGenre && matchesQuery && matchesYear && matchesRange;
+              // Combine conditions for final query match
+              // All author-related matches (matchesAnySearchAuthor) AND all generic keyword matches must be true.
+              const finalQueryMatch = matchesAnySearchAuthor && matchesGenericKeyword;
+
+              console.log(`  Title(${matchesTitle}) Genre(${matchesGenre}) SearchAuthors(${matchesAnySearchAuthor}) GenericKeyword(${matchesGenericKeyword}) FinalQuery(${finalQueryMatch}) Year(${matchesYear}) Range(${matchesRange})`); // Debug individual matches
+
+              // Overall filter: all relevant conditions must be true
+              return matchesTitle && matchesGenre && finalQueryMatch && matchesYear && matchesRange;
             });
           }            
 
@@ -196,6 +316,7 @@ function CohereChatbot({ books, loadBooks }) {
     }
   };
 
+  // Allow sending messages with Enter key
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
       handleSend();
@@ -225,4 +346,3 @@ function CohereChatbot({ books, loadBooks }) {
 }
 
 export default CohereChatbot;
-
