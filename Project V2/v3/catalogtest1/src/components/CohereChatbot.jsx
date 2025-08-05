@@ -239,83 +239,18 @@ function CohereChatbot({ books, loadBooks }) {
         }
 
         else if (intent === 'delete') {
-          // Create a more robust filtering function specifically for delete operations
-          const deleteMatches = books.filter(book => {
-            // Handle "null" strings from Cohere
-            const titleCriteria = data?.title === "null" ? '' : data?.title?.trim() || '';
-            const authorCriteria = data?.author === "null" ? '' : data?.author?.trim() || '';
-            const genreCriteria = data?.genre === "null" ? '' : data?.genre?.trim() || '';
-            const yearCriteria = data?.year;
-            const rangeCriteria = data?.range;
-            const queryCriteria = data?.query === "null" ? '' : data?.query?.toLowerCase() || '';
-        
-            // Title matching - exact or partial based on specificity
-            let titleMatch = true;
-            if (titleCriteria) {
-              titleMatch = book.title?.toLowerCase().includes(titleCriteria.toLowerCase());
-            }
-        
-            // Author matching - handle multiple authors separated by commas
-            let authorMatch = true;
-            if (authorCriteria) {
-              // Split by comma, "and", or "or" and check if book author contains any of them
-              const authorsToFind = authorCriteria.split(/(?:,\s*| and | or )/i)
-                .map(a => a.trim())
-                .filter(a => a);
-              
-              authorMatch = authorsToFind.some(authorToFind => 
-                book.author?.toLowerCase().includes(authorToFind.toLowerCase())
-              );
-            }
-        
-            // Genre matching
-            let genreMatch = true;
-            if (genreCriteria) {
-              genreMatch = book.genre?.toLowerCase().includes(genreCriteria.toLowerCase());
-            }
-        
-            // Year matching - exact match
-            let yearMatch = true;
-            if (yearCriteria !== null && !isNaN(parseInt(yearCriteria))) {
-              yearMatch = book.year === parseInt(yearCriteria);
-            }
-        
-            // Range matching - inclusive on both ends
-            let rangeMatch = true;
-            if (rangeCriteria) {
-              const { after, before } = rangeCriteria;
-              if (after !== null && after !== undefined) {
-                rangeMatch = rangeMatch && book.year >= after;
-              }
-              if (before !== null && before !== undefined) {
-                rangeMatch = rangeMatch && book.year <= before;
-              }
-            }
-        
-            // Query matching - fallback for general searches
-            let queryMatch = true;
-            if (queryCriteria && !titleCriteria && !authorCriteria && !genreCriteria && !yearCriteria && !rangeCriteria) {
-              // If no specific criteria but there's a query, search in all fields
-              queryMatch = book.title?.toLowerCase().includes(queryCriteria) ||
-                           book.author?.toLowerCase().includes(queryCriteria) ||
-                           book.genre?.toLowerCase().includes(queryCriteria);
-            }
-        
-            // All conditions must be true for a match
-            return titleMatch && authorMatch && genreMatch && yearMatch && rangeMatch && queryMatch;
-          });
-        
-          console.log("Delete matches found:", deleteMatches.length, deleteMatches.map(b => `${b.title} by ${b.author}`));
-        
-          if (deleteMatches.length === 1) {
+          // Use the more flexible filterBooksByCriteria for deletion
+          const matches = filterBooksByCriteria(books, data, false, true); // isStrictTitleMatch=false, isDeleteIntent=true
+          
+          if (matches.length === 1) {
             try {
-              await deleteBook(deleteMatches[0].id);
+              await deleteBook(matches[0].id);
               await loadBooks();
               setMessages(m => [...m, {
                 role: 'bot',
-                text: `Deleted book "${deleteMatches[0].title}" by ${deleteMatches[0].author}.`
+                text: `Deleted book "${matches[0].title}" by ${matches[0].author}.`
               }]);
-              enqueueSnackbar(`Deleted "${deleteMatches[0].title}"`, { variant: 'info' });
+              enqueueSnackbar(`Deleted "${matches[0].title}"`, { variant: 'info' });
             } catch (deleteError) {
               console.error("Error deleting book from backend:", deleteError);
               const errorMessage = deleteError.response && deleteError.response.data && deleteError.response.data.message
@@ -327,36 +262,13 @@ function CohereChatbot({ books, loadBooks }) {
               }]);
               enqueueSnackbar(`Failed to delete book: ${errorMessage}`, { variant: 'error' });
             }
-          } else if (deleteMatches.length > 1) {
-            const matchedTitles = deleteMatches.map(b => `"${b.title}" by ${b.author} (${b.year})`).join(', ');
-            setMessages(m => [...m, { 
-              role: 'bot', 
-              text: `Multiple books matched (${deleteMatches.length}): ${matchedTitles}. Please be more specific to delete a single book.` 
-            }]);
-            enqueueSnackbar(`Multiple books matched (${deleteMatches.length}). Please be more specific.`, { variant: 'warning' });
+          } else if (matches.length > 1) {
+            const matchedTitles = matches.map(b => `"${b.title}" by ${b.author} (${b.year})`).join(', ');
+            setMessages(m => [...m, { role: 'bot', text: `Multiple books matched: ${matchedTitles}. Please be more specific.` }]);
+            enqueueSnackbar(`Multiple books matched. Please be more specific.`, { variant: 'warning' });
           } else {
-            // Provide more helpful feedback about what was searched for
-            let searchDescription = [];
-            if (data?.title && data.title !== "null") searchDescription.push(`title containing "${data.title}"`);
-            if (data?.author && data.author !== "null") searchDescription.push(`author(s): ${data.author}`);
-            if (data?.genre && data.genre !== "null") searchDescription.push(`genre containing "${data.genre}"`);
-            if (data?.year) searchDescription.push(`published in ${data.year}`);
-            if (data?.range) {
-              const { after, before } = data.range;
-              if (after && before) searchDescription.push(`published between ${after} and ${before}`);
-              else if (after) searchDescription.push(`published after ${after}`);
-              else if (before) searchDescription.push(`published before ${before}`);
-            }
-            
-            const searchText = searchDescription.length > 0 
-              ? ` matching ${searchDescription.join(', ')}`
-              : '';
-            
-            setMessages(m => [...m, { 
-              role: 'bot', 
-              text: `No books found${searchText}. Please check your search criteria.` 
-            }]);
-            enqueueSnackbar('No books found to delete.', { variant: 'warning' });
+            setMessages(m => [...m, { role: 'bot', text: 'Book to delete not found.' }]);
+            enqueueSnackbar('Book to delete not found.', { variant: 'warning' });
           }
         }
 
