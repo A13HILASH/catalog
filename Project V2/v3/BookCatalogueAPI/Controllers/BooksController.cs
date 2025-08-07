@@ -1,6 +1,7 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using BookCatalogueAPI.Models;
+﻿using BookCatalogueAPI.DTOs;
 using BookCatalogueAPI.Interfaces;
+using BookCatalogueAPI.Models;
+using Microsoft.AspNetCore.Mvc;
 
 namespace BookCatalogueAPI.Controllers
 {
@@ -10,43 +11,60 @@ namespace BookCatalogueAPI.Controllers
     {
         private readonly IBookManager _bookManager;
 
-        public BooksController(IBookManager bookManager) => _bookManager = bookManager;
+        public BooksController(IBookManager bookManager)
+        {
+            _bookManager = bookManager;
+        }
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Book>>> Get()
+        public async Task<ActionResult<IEnumerable<BookListItemDto>>> Get()
         {
-            return Ok(await _bookManager.GetAllBooks());
+            var books = await _bookManager.GetAllBooksAsync();
+            return Ok(books);
+        }
+
+        [HttpGet("{id}")]
+        public async Task<ActionResult<BookDetailsDto>> Get(int id)
+        {
+            var book = await _bookManager.GetBookByIdAsync(id);
+            if (book == null)
+            {
+                return NotFound();
+            }
+            return Ok(book);
         }
 
         [HttpPost]
-        public async Task<ActionResult<Book>> Post(Book book)
+        public async Task<ActionResult<BookDetailsDto>> Post(BookDto bookDto)
         {
-            try
+            if (!string.IsNullOrEmpty(bookDto.OpenLibraryId)
+                && await _bookManager.BookExistsAsync(bookDto.OpenLibraryId))
             {
-                var newBook = await _bookManager.AddBook(book);
-                return CreatedAtAction(nameof(Get), new { id = newBook.Id }, newBook);
+                return Conflict("Book already exists.");
             }
-            catch (InvalidOperationException ex)
-            {
-                return Conflict(ex.Message);
-            }
+
+            var newBook = await _bookManager.CreateBookAsync(bookDto);
+            return CreatedAtAction(nameof(Get), new { id = newBook.Id }, newBook);
         }
 
         [HttpPut("{id}")]
-        public async Task<IActionResult> Put(int id, Book book)
+        public async Task<IActionResult> Put(int id, BookDto bookDto)
         {
-            var success = await _bookManager.UpdateBook(id, book);
-            if (!success) return BadRequest();
-            
-            return NoContent();
+            try
+            {
+                await _bookManager.UpdateBookAsync(id, bookDto);
+                return NoContent();
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
         }
 
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)
         {
-            var success = await _bookManager.DeleteBook(id);
-            if (!success) return NotFound();
-
+            await _bookManager.DeleteBookAsync(id);
             return NoContent();
         }
     }

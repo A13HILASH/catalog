@@ -1,13 +1,18 @@
-﻿namespace BookCatalogueAPI.Models
+﻿using System.Collections.Generic;
+
+namespace BookCatalogueAPI.Models
 {
     public class Book
     {
         public int Id { get; set; }
         public string Title { get; set; } = "";
-        public string Author { get; set; } = string.Empty;
-        public string Genre { get; set; } = string.Empty;
         public int Year { get; set; }
         public string CoverUrl { get; set; } = string.Empty;
         public string OpenLibraryId { get; set; } = string.Empty;
+
+        // Navigation properties for the many-to-many relationships
+        public ICollection<BookAuthor> BookAuthors { get; set; } = new List<BookAuthor>();
+        public ICollection<BookGenre> BookGenres { get; set; } = new List<BookGenre>();
+        public ICollection<BookMood> BookMoods { get; set; } = new List<BookMood>();
     }
 }

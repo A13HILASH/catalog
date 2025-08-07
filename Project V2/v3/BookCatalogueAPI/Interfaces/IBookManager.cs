@@ -1,12 +1,16 @@
+// IBookManager.cs (Interface)
+using BookCatalogueAPI.DTOs;
 using BookCatalogueAPI.Models;
 
 namespace BookCatalogueAPI.Interfaces
 {
     public interface IBookManager
     {
-        Task<IEnumerable<Book>> GetAllBooks();
-        Task<Book> AddBook(Book book);
-        Task<bool> UpdateBook(int id, Book book);
-        Task<bool> DeleteBook(int id);
+        Task<BookDetailsDto?> GetBookByIdAsync(int id);
+        Task<IEnumerable<BookListItemDto>> GetAllBooksAsync();
+        Task<BookDetailsDto> CreateBookAsync(BookDto bookDto);
+        Task UpdateBookAsync(int id, BookDto bookDto);
+        Task DeleteBookAsync(int id);
+        Task<bool> BookExistsAsync(string openLibraryId);
     }
 }

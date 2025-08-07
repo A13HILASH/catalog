@@ -1,0 +1,77 @@
+✅ POST Request JSON:
+
+{
+  "id": 59,
+  "title": "The Hobbit (Updated Edition)",
+  "authors": "J.R.R. Tolkien",
+  "genres": "Fantasy, Adventure",
+  "moods": "Epic, Enchanting",
+  "year": 2021,
+  "coverUrl": "https://example.com/hobbit_updated_cover.jpg",
+  "openLibraryId": "OL1234567hobbit"
+}
+
+
+💾 How This POST Is Processed Into Tables
+
+📘 1. Books Table
+A new row is inserted:
+
+Id	Title	Year	CoverUrl	OpenLibraryId
+59	The Hobbit (Updated...)	2021	https://example.com/hobbit_updated_cover.jpg	OL1234567hobbit
+
+👨‍💼 2. Authors Table
+System checks if “J.R.R. Tolkien” exists. If not, it's inserted.
+
+Id	Name
+1	J.R.R. Tolkien
+
+(Assume Tolkien already exists with Id 1)
+
+🔗 3. BookAuthors Join Table
+This creates a many-to-many link between Book ID 59 and Author ID 1.
+
+BookId	AuthorId
+59	1
+
+🧝 4. Genres Table
+Split string "Fantasy, Adventure" → ["Fantasy", "Adventure"]
+
+Each is inserted if not already in the table:
+
+Id	Name
+1	Fantasy
+2	Adventure
+
+🔗 5. BookGenres Join Table
+Links Book ID 59 to Genre IDs 1 and 2:
+
+BookId	GenreId
+59	1
+59	2
+
+🌌 6. Moods Table
+Split string "Epic, Enchanting" → ["Epic", "Enchanting"]
+
+Insert new moods (if not already present):
+
+Id	Name
+3	Epic
+4	Enchanting
+
+🔗 7. BookMoods Join Table
+Connect Book ID 59 to Mood IDs 3 and 4:
+
+BookId	MoodId
+59	3
+59	4
+
+🔁 Summary of Table Interactions
+Table	Action	Notes
+Books	Insert row	New book added
+Authors	Lookup/Insert	Add if not exists
+BookAuthors	Insert link	Book ↔ Author
+Genres	Lookup/Insert	Handle comma-separated input
+BookGenres	Insert links	Book ↔ Genres
+Moods	Lookup/Insert	Same as genres
+BookMoods	Insert links	Book ↔ Moods

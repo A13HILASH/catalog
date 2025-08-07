@@ -1,0 +1,43 @@
+ Books
+Id: INT (Primary Key)
+
+Title: NVARCHAR(MAX)
+
+Year: INT
+
+CoverUrl: NVARCHAR(MAX)
+
+OpenLibraryId: NVARCHAR(MAX)
+
+Authors
+Id: INT (Primary Key)
+
+Name: NVARCHAR(MAX)
+
+Genres
+Id: INT (Primary Key)
+
+Name: NVARCHAR(MAX)
+
+Moods
+Id: INT (Primary Key)
+
+Name: NVARCHAR(MAX)
+
+Join Tables (Many-to-Many Relationships)
+These tables are the key to your flexible schema, linking books to multiple authors, genres, and moods.
+
+BookAuthors
+BookId: INT (PK, Foreign Key → Books.Id)
+
+AuthorId: INT (PK, Foreign Key → Authors.Id)
+
+BookGenres
+BookId: INT (PK, Foreign Key → Books.Id)
+
+GenreId: INT (PK, Foreign Key → Genres.Id)
+
+BookMoods
+BookId: INT (PK, Foreign Key → Books.Id)
+
+MoodId: INT (PK, Foreign Key → Moods.Id)

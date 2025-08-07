@@ -1,7 +1,10 @@
-using Microsoft.EntityFrameworkCore;
+// BookRepository.cs (Implementation)
 using BookCatalogueAPI.Data;
 using BookCatalogueAPI.Interfaces;
 using BookCatalogueAPI.Models;
+using Microsoft.EntityFrameworkCore;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace BookCatalogueAPI.Repositories
 {
@@ -13,17 +16,19 @@ namespace BookCatalogueAPI.Repositories
 
         public async Task<IEnumerable<Book>> GetAllBooksAsync()
         {
-            return await _context.Book.ToListAsync();
+            return await _context.Book
+                .Include(b => b.BookAuthors).ThenInclude(ba => ba.Author)
+                .Include(b => b.BookGenres).ThenInclude(bg => bg.Genre)
+                .ToListAsync();
         }
 
         public async Task<Book?> GetBookByIdAsync(int id)
         {
-            return await _context.Book.FindAsync(id);
-        }
-
-        public async Task<bool> BookExistsByOpenLibraryIdAsync(string openLibraryId)
-        {
-            return await _context.Book.AnyAsync(b => b.OpenLibraryId == openLibraryId);
+            return await _context.Book
+                .Include(b => b.BookAuthors).ThenInclude(ba => ba.Author)
+                .Include(b => b.BookGenres).ThenInclude(bg => bg.Genre)
+                .Include(b => b.BookMoods).ThenInclude(bm => bm.Mood)
+                .FirstOrDefaultAsync(b => b.Id == id);
         }
 
         public async Task AddBookAsync(Book book)
@@ -34,8 +39,7 @@ namespace BookCatalogueAPI.Repositories
 
         public async Task UpdateBookAsync(Book book)
         {
-            // This is the correct way to handle an update on an entity that is already tracked.
-            // We just need to save the changes.
+            _context.Entry(book).State = EntityState.Modified;
             await _context.SaveChangesAsync();
         }
 
@@ -43,6 +47,11 @@ namespace BookCatalogueAPI.Repositories
         {
             _context.Book.Remove(book);
             await _context.SaveChangesAsync();
+        }
+        
+        public async Task<bool> BookExistsAsync(string openLibraryId)
+        {
+            return await _context.Book.AnyAsync(b => b.OpenLibraryId == openLibraryId);
         }
     }
 }
