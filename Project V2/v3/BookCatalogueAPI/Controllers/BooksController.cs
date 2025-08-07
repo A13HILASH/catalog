@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using BookCatalogueAPI.Data;
 using BookCatalogueAPI.Models;
+using BookCatalogueAPI.Interfaces;
 
 namespace BookCatalogueAPI.Controllers
 {
@@ -9,45 +8,45 @@ namespace BookCatalogueAPI.Controllers
     [ApiController]
     public class BooksController : ControllerBase
     {
-        private readonly AppDbContext _context;
-        public BooksController(AppDbContext context) => _context = context;
+        private readonly IBookManager _bookManager;
+
+        public BooksController(IBookManager bookManager) => _bookManager = bookManager;
 
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Book>>> Get()
-            => await _context.Book.ToListAsync();
+        {
+            return Ok(await _bookManager.GetAllBooks());
+        }
 
         [HttpPost]
         public async Task<ActionResult<Book>> Post(Book book)
         {
-            if (!string.IsNullOrEmpty(book.OpenLibraryId)
-                && await _context.Book.AnyAsync(b => b.OpenLibraryId == book.OpenLibraryId))
+            try
             {
-                return Conflict("Book already exists.");
+                var newBook = await _bookManager.AddBook(book);
+                return CreatedAtAction(nameof(Get), new { id = newBook.Id }, newBook);
             }
-
-            _context.Book.Add(book);
-            await _context.SaveChangesAsync();
-            return CreatedAtAction(nameof(Get), new { id = book.Id }, book);
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(ex.Message);
+            }
         }
 
         [HttpPut("{id}")]
         public async Task<IActionResult> Put(int id, Book book)
         {
-            if (id != book.Id) return BadRequest();
-
-            _context.Entry(book).State = EntityState.Modified;
-            await _context.SaveChangesAsync();
+            var success = await _bookManager.UpdateBook(id, book);
+            if (!success) return BadRequest();
+            
             return NoContent();
         }
 
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)
         {
-            var book = await _context.Book.FindAsync(id);
-            if (book == null) return NotFound();
+            var success = await _bookManager.DeleteBook(id);
+            if (!success) return NotFound();
 
-            _context.Book.Remove(book);
-            await _context.SaveChangesAsync();
             return NoContent();
         }
     }
