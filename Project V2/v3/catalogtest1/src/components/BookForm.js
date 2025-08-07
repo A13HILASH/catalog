@@ -27,7 +27,13 @@ export default function BookForm({ edit }) {
   const { enqueueSnackbar } = useSnackbar();
   const nav = useNavigate();
   const { id } = useParams();
-  const [book, setBook] = useState({ title: '', author: '', genre: '', year: 0, coverUrl: '' });
+  const [book, setBook] = useState({ 
+    title: '', 
+    authors: '', 
+    genres: '', 
+    year: 0, 
+    coverUrl: '' 
+  });
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -57,12 +63,31 @@ export default function BookForm({ edit }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+
+    // Function to sanitize the input string, replacing " and " with "," and trimming whitespace.
+    const sanitizeInput = (inputString) => {
+      if (!inputString) return '';
+      return inputString
+        .replace(/\s+and\s+/gi, ',') // Replace " and " with a comma, case-insensitive
+        .split(',')
+        .map(item => item.trim()) // Trim whitespace from each item
+        .filter(item => item.length > 0) // Remove any empty strings
+        .join(', ');
+    };
+
     try {
+      const bookToSave = {
+        ...book,
+        // Sanitize the author and genre strings before sending to the backend
+        authors: sanitizeInput(book.authors),
+        genres: sanitizeInput(book.genres),
+      };
+
       if (edit) {
-        await updateBook(book.id, book);
+        await updateBook(book.id, bookToSave);
         enqueueSnackbar('Book updated successfully!', { variant: 'success' });
       } else {
-        await addBook(book);
+        await addBook(bookToSave);
         enqueueSnackbar('Book added successfully!', { variant: 'success' });
       }
       nav('/mybooks');
@@ -144,9 +169,9 @@ export default function BookForm({ edit }) {
               <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
-                  label="Author"
-                  value={book.author}
-                  onChange={e => setBook({ ...book, author: e.target.value })}
+                  label="Authors (comma-separated)"
+                  value={book.authors}
+                  onChange={e => setBook({ ...book, authors: e.target.value })}
                   required
                   variant="outlined"
                   InputProps={{
@@ -163,9 +188,9 @@ export default function BookForm({ edit }) {
               <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
-                  label="Genre"
-                  value={book.genre}
-                  onChange={e => setBook({ ...book, genre: e.target.value })}
+                  label="Genres (comma-separated)"
+                  value={book.genres}
+                  onChange={e => setBook({ ...book, genres: e.target.value })}
                   required
                   variant="outlined"
                   InputProps={{

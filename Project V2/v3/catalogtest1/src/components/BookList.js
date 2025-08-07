@@ -3,7 +3,8 @@ import {
   Table, TableHead, TableRow, TableCell, TableBody,
   IconButton, TextField, TableSortLabel, TablePagination,
   Grid, Button, Avatar, CircularProgress, Backdrop,
-  Dialog, DialogTitle, DialogContent, DialogActions, Typography
+  Dialog, DialogTitle, DialogContent, DialogActions, Typography,
+  List, ListItem, ListItemText
 } from '@mui/material';
 import { Edit, Delete } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
@@ -28,8 +29,54 @@ export default function BookList() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [bookToDelete, setBookToDelete] = useState(null);
   
+  // New state for the authors/genres modal
+  const [listModalOpen, setListModalOpen] = useState(false);
+  const [listModalTitle, setListModalTitle] = useState('');
+  const [listModalItems, setListModalItems] = useState([]);
+  
   // Fallback image for missing book covers
   const fallbackImage = 'https://via.placeholder.com/40x60?text=No+Cover';
+
+  // Helper function to format a list of authors or genres with a clickable 'more' option
+  const formatList = (listString, title) => {
+    if (!listString) return null;
+    const items = listString.split(',').map(item => item.trim());
+    
+    // If there are more than 2 items, return a span with a clickable link
+    if (items.length > 2) {
+      return (
+        <span>
+          {items.slice(0, 2).join(', ')} 
+          <Typography
+            component="span"
+            onClick={(e) => {
+              e.stopPropagation();
+              setListModalTitle(title);
+              setListModalItems(items);
+              setListModalOpen(true);
+            }}
+            sx={{
+              textDecoration: 'underline',
+              cursor: 'pointer',
+              color: 'primary.main',
+              marginLeft: '4px',
+              '&:hover': {
+                color: 'primary.dark'
+              }
+            }}
+          >
+            & {items.length - 2} more
+          </Typography>
+        </span>
+      );
+    } 
+    // If there are exactly 2 items, join with ' & '
+    else if (items.length === 2) {
+      return items.join(' & ');
+    }
+    // For 1 item or other cases, join with ', '
+    return items.join(', ');
+  };
 
   const fetchBooks = useCallback(async () => {
     setLoading(true);
@@ -48,22 +95,24 @@ export default function BookList() {
     fetchBooks();
   }, [fetchBooks]);
 
-  // Memoize filtered, sorted, and paginated data
   const filteredBooks = useMemo(() => {
+    const text = filter.toLowerCase();
     return books.filter(b => {
-      const text = filter.toLowerCase();
-      return (
-        b.title.toLowerCase().includes(text) ||
-        b.author.toLowerCase().includes(text) ||
-        b.genre.toLowerCase().includes(text) ||
-        String(b.year).includes(text)
-      );
+      const authorMatch = b.authors ? b.authors.toLowerCase().includes(text) : false;
+      const genreMatch = b.genres ? b.genres.toLowerCase().includes(text) : false;
+      const titleMatch = b.title ? b.title.toLowerCase().includes(text) : false;
+      const yearMatch = b.year ? String(b.year).includes(text) : false;
+
+      return titleMatch || authorMatch || genreMatch || yearMatch;
     });
   }, [books, filter]);
 
   const sortedBooks = useMemo(() => {
     return [...filteredBooks].sort((a, b) => {
       const x = a[orderBy], y = b[orderBy];
+      if (typeof x === 'string' && typeof y === 'string') {
+        return order === 'asc' ? x.localeCompare(y) : y.localeCompare(x);
+      }
       return order === 'asc' ? (x > y ? 1 : -1) : (x < y ? 1 : -1);
     });
   }, [filteredBooks, order, orderBy]);
@@ -96,6 +145,12 @@ export default function BookList() {
   const closeDeleteDialog = () => {
     setDeleteDialogOpen(false);
     setBookToDelete(null);
+  };
+
+  const closeListModal = () => {
+    setListModalOpen(false);
+    setListModalTitle('');
+    setListModalItems([]);
   };
 
   const fetchGoogleBookById = async (googleId) => {
@@ -146,7 +201,7 @@ export default function BookList() {
             <TableHead>
               <TableRow>
                 <TableCell>Cover</TableCell>
-                {['title', 'author', 'genre', 'year'].map(c => (
+                {['title', 'authors', 'genres', 'year'].map(c => (
                   <TableCell key={c}>
                     <TableSortLabel
                       active={orderBy === c}
@@ -184,8 +239,8 @@ export default function BookList() {
                       />
                     </TableCell>
                     <TableCell>{bk.title}</TableCell>
-                    <TableCell>{bk.author}</TableCell>
-                    <TableCell>{bk.genre}</TableCell>
+                    <TableCell>{formatList(bk.authors, "Authors")}</TableCell>
+                    <TableCell>{formatList(bk.genres, "Genres")}</TableCell>
                     <TableCell>{bk.year}</TableCell>
                     <TableCell>
                       <IconButton
@@ -233,11 +288,30 @@ export default function BookList() {
         </>
       )}
 
+      {/* Authors/Genres List Modal */}
+      <Dialog open={listModalOpen} onClose={closeListModal} PaperProps={{ sx: { borderRadius: 4, width: '90%', maxWidth: '400px' } }}>
+        <DialogTitle sx={{ backgroundColor: 'primary.main', color: 'white' }}>
+          {listModalTitle}
+        </DialogTitle>
+        <DialogContent dividers>
+          <List>
+            {listModalItems.map((item, index) => (
+              <ListItem key={index}>
+                <ListItemText primary={item} />
+              </ListItem>
+            ))}
+          </List>
+        </DialogContent>
+        <DialogActions sx={{ padding: 2 }}>
+          <Button onClick={closeListModal} variant="contained">Close</Button>
+        </DialogActions>
+      </Dialog>
+      
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onClose={closeDeleteDialog}>
         <DialogTitle>Confirm Deletion</DialogTitle>
         <DialogContent>
-          Are you sure you want to delete "{bookToDelete?.title}" by {bookToDelete?.author}?
+          Are you sure you want to delete "{bookToDelete?.title}" by {bookToDelete?.authors}?
         </DialogContent>
         <DialogActions>
           <Button onClick={closeDeleteDialog}>Cancel</Button>

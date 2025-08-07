@@ -374,8 +374,10 @@ export default function SearchBooks() {
       await addBook({
         openLibraryId: v.id,
         title: vol.title,
-        author: (vol.authors || []).join(', '),
-        genre: (vol.categories?.[0] || null),
+        authors: (vol.authors || []).join(', '),
+        genres: (vol.categories || []).map(category => 
+          category.replace(/\s*&\s*/g, ', ')
+        ).join(', '),
         year: parseInt(vol.publishedDate || '0'),
         coverUrl: vol.imageLinks?.thumbnail
       });
