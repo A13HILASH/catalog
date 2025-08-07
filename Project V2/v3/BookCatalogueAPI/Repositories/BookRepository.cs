@@ -34,7 +34,8 @@ namespace BookCatalogueAPI.Repositories
 
         public async Task UpdateBookAsync(Book book)
         {
-            _context.Entry(book).State = EntityState.Modified;
+            // This is the correct way to handle an update on an entity that is already tracked.
+            // We just need to save the changes.
             await _context.SaveChangesAsync();
         }
 

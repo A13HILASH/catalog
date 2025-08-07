@@ -14,6 +14,7 @@ namespace BookCatalogueAPI.Managers
             return await _repository.GetAllBooksAsync();
         }
 
+        // The return type is changed from Task<Book?> to Task<Book> to match the IBookManager interface.
         public async Task<Book> AddBook(Book book)
         {
             if (!string.IsNullOrEmpty(book.OpenLibraryId) && await _repository.BookExistsByOpenLibraryIdAsync(book.OpenLibraryId))
@@ -27,12 +28,23 @@ namespace BookCatalogueAPI.Managers
 
         public async Task<bool> UpdateBook(int id, Book book)
         {
+            // Business logic to check if the ID matches.
             if (id != book.Id) return false;
 
+            // Fetch the existing book. This will be tracked by the DbContext.
             var existingBook = await _repository.GetBookByIdAsync(id);
             if (existingBook == null) return false;
 
-            await _repository.UpdateBookAsync(book);
+            // Update the properties of the existing, tracked entity with the new values.
+            existingBook.Title = book.Title;
+            existingBook.Author = book.Author;
+            existingBook.Genre = book.Genre;
+            existingBook.Year = book.Year;
+            existingBook.CoverUrl = book.CoverUrl;
+            existingBook.OpenLibraryId = book.OpenLibraryId;
+            
+            // Now, pass the existing, updated book to the repository to save the changes.
+            await _repository.UpdateBookAsync(existingBook);
             return true;
         }
 
