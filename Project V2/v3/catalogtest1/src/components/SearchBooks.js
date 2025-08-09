@@ -29,6 +29,7 @@ import {
 import { addBook, getBooks } from '../services/bookService';
 import { useSnackbar } from 'notistack';
 import FloatingChatbot from './FloatingChatbot';
+import CohereChatBot from './CohereChatbot';
 
 
 // Styled components with modern design
@@ -1002,7 +1003,8 @@ export default function SearchBooks() {
         </Zoom>
       )}
 
-      {/*<Chatbot />*/}
+      {/*<CohereChatBot />*/}
+     
       <FloatingChatbot books={myBooks} loadBooks={loadMyBooks} />
       
       {/* Detail Modal */}

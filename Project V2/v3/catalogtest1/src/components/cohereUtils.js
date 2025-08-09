@@ -1,278 +1,517 @@
 import axios from 'axios';
 
-export async function callCohere(message) {
-  const fullPrompt = `You are BookPal, a helpful assistant for a book catalog application. Your primary function is to help users manage their book collection (add, update, delete, search). You should also be friendly and informative about your capabilities, and politely decline unrelated requests.
+// Book management API endpoints
+const API_BASE = "http://localhost:4540/api/books";
 
-Your job is to understand user requests and return an array of strict JSON objects.
-CRITICAL: ONLY return the JSON array and nothing else. Do NOT include any conversational text or explanations outside the JSON array.
+// Book API functions
+export const getBooks = () => axios.get(API_BASE);
+export const getBook = (id) => axios.get(`${API_BASE}/${id}`);
+export const addBook = (book) => axios.post(API_BASE, book);
+export const updateBook = (id, book) => axios.put(`${API_BASE}/${id}`, book);
+export const deleteBook = (id) => axios.delete(`${API_BASE}/${id}`);
 
-IMPORTANT: Focus on book catalog operations. If a user mentions "update", "change", "modify" with book-related terms (title, author, genre, year), it should be classified as "update" intent, NOT "out_of_scope".
+// Cohere API configuration
+const COHERE_API_URL = 'https://api.cohere.ai/v1/chat';
+const COHERE_API_KEY = process.env.REACT_APP_COHERE_API_KEY;
 
-You can handle:
-- Adding, updating, deleting, and searching books.
-- Responding to greetings.
-- Explaining your capabilities and the app's purpose.
-- Indicating when a feature or query is outside your scope (weather, movies, jokes, etc.).
+// New, simplified system prompt for AI-driven book management
+// This prompt strictly enforces the JSON output for the 'add' intent.
+// CRITICAL: This prompt is updated to ensure the model only returns JSON for the LATEST command.
+const BOOK_MANAGEMENT_PROMPT = `
+You are an AI assistant for book catalog management. Your sole purpose is to convert the LATEST natural language request into a single structured JSON format.
 
-Prioritize "add" intent if book title and author are present.
-Your output should always be an array of JSON objects like this:
+CRITICAL INSTRUCTIONS:
+1. You MUST respond ONLY with a single JSON object. No other text, explanations, or conversation.
+2. The JSON object must have a top-level "intent" key and other keys based on the intent.
+3. You MUST NOT carry over information or parameters from previous requests. Base your response solely on the latest user command.
 
+For the "list_all_books" intent, your JSON must follow this structure:
 {
-  "intent": "add" | "update" | "delete" | "search" | "help" | "greeting" | "capability_query" | "out_of_scope",
-  "data": {
-    "title": string | null,
-    "author": string | null,
-    "genre": string | null,
-    "year": number | null,
-    "query": string | null,
-    "range": { "after": number, "before": number } | null,
-    "fieldsToUpdate": {
-      "title"?: string,
-      "author"?: string,
-      "genre"?: string,
-      "year"?: number
-    } | null
+  "intent": "list_all_books"
+}
+
+For the "add" intent, your JSON must follow this structure:
+{
+  "intent": "add",
+  "bookData": {
+    "title": "Book Title",
+    "authors": "Author 1, Author 2",
+    "genres": "Genre 1, Genre 2",
+    "moods": "mood 1, mood 2",
+    "year": 2024,
+    "coverUrl": "https://example.com/cover.jpg",
+    "openLibraryId": "OL123456"
   }
 }
 
-### Examples:
+For the "update" intent, your JSON must follow this structure:
+{
+  "intent": "update",
+  "searchCriteria": {
+    "title": "Book Title"
+  },
+  "updates": {
+    "authors": "New Author",
+    "year": 2024
+  }
+}
 
-// --- ADD EXAMPLES ---
-Message: Add book titled "Sapiens" by Yuval Noah Harari published in 2011
-Output: [{ "intent": "add", "data": { "title": "Sapiens", "author": "Yuval Noah Harari", "genre": null, "year": 2011, "query": null, "range": null, "fieldsToUpdate": null }}]
+For the "delete" intent, your JSON must follow this structure. You must provide a search criteria.
+{
+  "intent": "delete",
+  "searchCriteria": {
+    "title": "Book Title"
+  }
+}
 
-Message: Add book titled "Dune" by Frank Herbert published in 1965 of the genre Science Fiction
-Output: [{ "intent": "add", "data": { "title": "Dune", "author": "Frank Herbert", "genre": "Science Fiction", "year": 1965, "query": null, "range": null, "fieldsToUpdate": null }}]
+For the "search" intent, your JSON must follow this flexible structure. Only include the fields that are specified by the user. If the user asks for multiple authors or genres, represent them as a comma-separated string.
+{
+  "intent": "search",
+  "parameters": {
+    "title": "partial title",
+    "authors": "Author1, Author2",
+    "genres": "Genre1, Genre2",
+    "yearAfter": 2000,
+    "yearBefore": 2020
+  }
+}
 
-// --- UPDATE EXAMPLES ---
-Message: Update genre of book by Robert C. Martin to Software
-Output: [{ "intent": "update", "data": { "title": null, "author": "Robert C. Martin", "genre": null, "year": null, "query": null, "range": null, "fieldsToUpdate": { "genre": "Software" } }}]
+For the "book_help" intent (when users ask for help, assistance, general questions about the app, greetings, thanks, or other conversational messages), your JSON must follow this structure:
+{
+  "intent": "book_help",
+  "query": "user's original question or message"
+}
 
-Message: Update year of book by Robert C. Martin in Software genre to 2010
-Output: [{ "intent": "update", "data": { "title": null, "author": "Robert C. Martin", "genre": "Software", "year": null, "query": null, "range": null, "fieldsToUpdate": { "year": 2010 } }}]
+You should extract as much information as possible from the user's request. If a field is not provided, do not include it in the JSON object. Authors, genres, and moods should be comma-separated strings. The year should be a number.
 
-Message: Update year of "Clean Code" to 2010
-Output: [{ "intent": "update", "data": { "title": "Clean Code", "author": null, "genre": null, "year": null, "query": null, "range": null, "fieldsToUpdate": { "year": 2010 } }}]
+EXAMPLE 1 (LIST ALL BOOKS):
+User: List all books
+Your response MUST be:
+{
+  "intent": "list_all_books"
+}
 
-Message: Change the title of book by Frank Herbert published in 1965 to "Dune Saga"
-Output: [{ "intent": "update", "data": { "title": null, "author": "Frank Herbert", "genre": null, "year": 1965, "query": null, "range": null, "fieldsToUpdate": { "title": "Dune Saga" } }}]
+EXAMPLE 2 (ADD):
+User: Add a book called 'Dune' by Frank Herbert, published in 1965, genre Science Fiction
+Your response MUST be:
+{
+  "intent": "add",
+  "bookData": {
+    "title": "Dune",
+    "authors": "Frank Herbert",
+    "genres": "Science Fiction",
+    "year": 1965
+  }
+}
 
-Message: Change the genre of "Sapiens" to History
-Output: [{ "intent": "update", "data": { "title": "Sapiens", "author": null, "genre": null, "year": null, "query": null, "range": null, "fieldsToUpdate": { "genre": "History" } }}]
+EXAMPLE 3 (UPDATE):
+User: Find the book "Neuromancer" published in 1984 and update its genre to "Sci-Fi"
+Your response MUST be:
+{
+  "intent": "update",
+  "searchCriteria": {
+    "title": "Neuromancer",
+    "year": 1984
+  },
+  "updates": {
+    "genres": "Sci-Fi"
+  }
+}
 
-// --- DELETE EXAMPLES ---
-User: Remove book in genre sci published in 1984
-AI: [{"intent": "delete", "data": {"title": null, "author": null, "genre": "Sci", "year": 1984, "query": null, "range": null, "fieldsToUpdate": null}}]
+EXAMPLE 4 (DELETE):
+User: Delete the book named 'Dune'
+Your response MUST be:
+{
+  "intent": "delete",
+  "searchCriteria": {
+    "title": "Dune"
+  }
+}
 
-User: Delete books by author A, author B, and author C
-AI: [{"intent": "delete", "data": {"title": null, "author": "author A, author B, author C", "genre": null, "year": null, "query": null, "range": null, "fieldsToUpdate": null}}]
+EXAMPLE 5 (COMPLEX SEARCH):
+User: Find sci-fi books by Arthur C. Clarke after 1960
+Your response MUST be:
+{
+  "intent": "search",
+  "parameters": {
+    "genres": "Sci-Fi",
+    "authors": "Arthur C. Clarke",
+    "yearAfter": 1960
+  }
+}
 
-User: Delete book titled "Neuromancer"
-AI: [{"intent": "delete", "data": {"title": "Neuromancer", "author": null, "genre": null, "year": null, "query": null, "range": null, "fieldsToUpdate": null}}]
+EXAMPLE 6 (HELP/ASSISTANCE/CONVERSATION):
+User: What can you do?
+Your response MUST be:
+{
+  "intent": "book_help",
+  "query": "What can you do?"
+}
 
-User: Delete books published between 1980 and 1990
-AI: [{"intent": "delete", "data": {"title": null, "author": null, "genre": null, "year": null, "query": null, "range": {"after": 1980, "before": 1990}, "fieldsToUpdate": null}}]
+User: Hello
+Your response MUST be:
+{
+  "intent": "book_help",
+  "query": "Hello"
+}
 
-Message: Delete "Sapiens"
-Output: [{ "intent": "delete", "data": { "title": "Sapiens", "author": null, "genre": null, "year": null, "query": null, "range": null, "fieldsToUpdate": null }}]
+User: Thank you
+Your response MUST be:
+{
+  "intent": "book_help",
+  "query": "Thank you"
+}
 
-Message: Remove the book by Frank Herbert
-Output: [{ "intent": "delete", "data": { "title": null, "author": "Frank Herbert", "genre": null, "year": null, "query": null, "range": null, "fieldsToUpdate": null }}]
+User: How do I add a book?
+Your response MUST be:
+{
+  "intent": "book_help",
+  "query": "How do I add a book?"
+}
 
+User: Hi there!
+Your response MUST be:
+{
+  "intent": "book_help",
+  "query": "Hi there!"
+}
 
-// --- SEARCH EXAMPLES ---
-Message: Find books by Yuval Noah Harari
-Output: [{ "intent": "search", "data": { "title": null, "author": "Yuval Noah Harari", "genre": null, "year": null, "query": null, "range": null, "fieldsToUpdate": null }}]
+Remember: ONLY respond with the JSON object for the LATEST user command.
+`;
 
-Message: Search for science fiction books published after 2000
-Output: [{ "intent": "search", "data": { "title": null, "author": null, "genre": "Science Fiction", "year": null, "query": null, "range": { "after": 2000, "before": null }, "fieldsToUpdate": null }}]
+const GENERAL_CONVERSATION_PROMPT = `You are a friendly and helpful AI assistant. Engage in natural conversations on any topic. Be informative, curious, and supportive. You can discuss a wide range of subjects including science, history, culture, technology, and more. Keep conversations engaging and provide thoughtful responses.`;
 
-// --- GREETING EXAMPLES ---
-Message: Hi
-Output: [{"intent": "greeting", "data": {"query": "hi"}}]
-
-// --- CAPABILITY QUERY EXAMPLES ---
-Message: What can you do?
-Output: [{"intent": "capability_query", "data": {"query": "what can you do?"}}]
-
-// --- OUT OF SCOPE EXAMPLES (ONLY for non-book related queries) ---
-Message: What's the weather like today?
-Output: [{"intent": "out_of_scope", "data": {"query": "what's the weather like today?"}}]
-Message: Tell me a joke
-Output: [{"intent": "out_of_scope", "data": {"query": "tell me a joke"}}]
-Message: Can you help me find a movie?
-Output: [{"intent": "out_of_scope", "data": {"query": "can you help me find a movie?"}}]
-
-Remember: Book-related update/change/modify requests are ALWAYS "update" intent, never "out_of_scope"!
-
-Message: ${message}
-Output:`;
+// New function to handle execution based on the new JSON format
+export const executeBookOperation = async (operation) => {
+  const { intent, bookData, searchCriteria, updates, parameters, query } = operation;
 
   try {
-    const response = await axios.post(
-      'https://api.cohere.ai/v1/generate',
-      {
-        prompt: fullPrompt,
-        max_tokens: 400,
-        temperature: 0.1,
-        k: 0,
-        p: 0.75,
-        frequency_penalty: 0,
-        presence_penalty: 0,
-        stop_sequences: ['Message:', 'Output:', '\n\n'],
-        return_likelihoods: 'NONE',
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.REACT_APP_COHERE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+    switch (intent) {
+      case 'add': {
+        // Log the book data to be added for debugging
+        console.log("Attempting to add book with data:", bookData);
 
-    let cohereOutput = response.data.generations[0].text.trim();
-    console.log("Raw Cohere Output:", cohereOutput);
+        // Fetch all existing books to check for duplicates
+        const existingBooksResponse = await getBooks();
+        const existingBooks = existingBooksResponse.data;
 
-    // Find the first and last bracket to ensure only JSON is parsed
-    const firstBracket = cohereOutput.indexOf('[');
-    const lastBracket = cohereOutput.lastIndexOf(']');
-
-    if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
-      cohereOutput = cohereOutput.substring(firstBracket, lastBracket + 1);
-    } else {
-      console.warn("Cohere output does not contain a valid JSON array structure, falling back to keyword extraction:", cohereOutput);
-      return extractIntentFromMessage(message);
-    }
-
-    console.log("Cleaned Cohere Output (for JSON parsing):", cohereOutput);
-
-    // Attempt to parse as JSON
-    try {
-      const parsed = JSON.parse(cohereOutput);
-      if (Array.isArray(parsed) && parsed.every(item => item.intent && item.data !== undefined)) {
-       
-        const corrected = parsed.map(item => {
-          // If Cohere incorrectly classified a book update as out_of_scope, fix it
-          if (item.intent === 'out_of_scope' && isBookUpdateRequest(message)) {
-            console.log("Correcting misclassified update intent from out_of_scope");
-            return extractIntentFromMessage(message)[0]; // Use fallback for update
-          }
-          return item;
+        // Check if a book with the same title, authors, genres, and year already exists
+        const isDuplicate = existingBooks.some(book => {
+          return book.title === bookData.title &&
+                 book.authors === bookData.authors &&
+                 book.genres === bookData.genres &&
+                 book.year === bookData.year;
         });
-        return corrected;
-      } else {
-        console.warn("Cohere returned valid JSON but not in expected intent/data format, falling back to keyword extraction:", parsed);
-        return extractIntentFromMessage(message);
-      }
-    } catch (jsonError) {
-      console.warn("Cohere output is not valid JSON, falling back to keyword extraction:", cohereOutput, jsonError);
-      return extractIntentFromMessage(message);
-    }
 
-  } catch (err) {
-    console.error("Cohere API error:", {
-      message: err.message,
-      response: err.response?.data,
-      stack: err.stack
+        if (isDuplicate) {
+          return {
+            success: false,
+            message: `Book "${bookData.title}" by ${bookData.authors} (${bookData.year}) already exists in the catalog.`
+          };
+        }
+
+        // If no duplicate is found, proceed with adding the book
+        const addResponse = await addBook(bookData);
+
+        return {
+          success: true,
+          message: `Book successfully added ✅\n\n**Book Details:**\n${formatBookDetails(addResponse.data)}`
+        };
+      }
+      
+      case 'update': {
+        console.log("Attempting to update book with search criteria:", searchCriteria, "and updates:", updates);
+        const allBooksResponse = await getBooks();
+        const allBooks = allBooksResponse.data;
+
+        // Find all books that match the search criteria
+        const matchingBooks = allBooks.filter(book => {
+          // Check if every criteria key/value pair matches the book
+          return Object.keys(searchCriteria).every(key => {
+            return book[key] === searchCriteria[key];
+          });
+        });
+
+        if (matchingBooks.length === 0) {
+          return {
+            success: false,
+            message: "No book found matching the provided criteria. Please check the title or other details."
+          };
+        } else if (matchingBooks.length > 1) {
+          const bookList = formatBookList(matchingBooks);
+          return {
+            success: false,
+            message: `Found multiple books matching your criteria. Please provide more specific information to select a single book.\n\nMatching books:\n\n${bookList}`
+          };
+        } else {
+          // Exactly one book found, proceed with the update
+          const bookToUpdate = matchingBooks[0];
+          await updateBook(bookToUpdate.id, { ...bookToUpdate, ...updates });
+
+          // Construct the full updated book object by merging the old and new data
+          const finalUpdatedBook = { ...bookToUpdate, ...updates };
+
+          // Build the detailed updates message
+          const updatesList = Object.keys(updates).map(key => {
+            // Capitalize the first letter of the key for display
+            const formattedKey = key.charAt(0).toUpperCase() + key.slice(1);
+            return `${formattedKey}: ${updates[key]}`;
+          }).join('\n');
+
+          const successMessage = 
+            `Book "${finalUpdatedBook.title}" successfully updated ✅\n` +
+            `Updates\n` +
+            `${updatesList}\n` +
+            `\n` +
+            `**Updated Book Details:**\n` +
+            `${formatBookDetails(finalUpdatedBook)}`;
+
+          return {
+            success: true,
+            message: successMessage
+          };
+        }
+      }
+
+      case 'delete': {
+        console.log("Attempting to delete book with search criteria:", searchCriteria);
+        const allBooksResponse = await getBooks();
+        const allBooks = allBooksResponse.data;
+
+        // Find all books that match the search criteria
+        const matchingBooks = allBooks.filter(book => {
+          // Check if every criteria key/value pair matches the book
+          return Object.keys(searchCriteria).every(key => {
+            return book[key] === searchCriteria[key];
+          });
+        });
+
+        if (matchingBooks.length === 0) {
+          return {
+            success: false,
+            message: "No book found matching the provided criteria. Deletion canceled."
+          };
+        } else if (matchingBooks.length > 1) {
+          const bookList = formatBookList(matchingBooks);
+          return {
+            success: false,
+            message: `Found multiple books matching your criteria. Please provide more specific information to select a single book for deletion.\n\nMatching books:\n\n${bookList}`
+          };
+        } else {
+          // Exactly one book found, now we need confirmation
+          const bookToDelete = matchingBooks[0];
+          await deleteBook(bookToDelete.id);
+          return {
+            success: true,
+            message: `📚 "${bookToDelete.title}" by ${bookToDelete.authors} has been successfully deleted. ✅`
+          };
+        }
+      }
+
+      case 'search': {
+        console.log("Attempting to search with parameters:", parameters);
+        const allBooksForSearch = (await getBooks()).data;
+        
+        const filteredBooks = allBooksForSearch.filter(book => {
+          // A book must match all provided parameters to be included in the search results
+          let matches = true;
+
+          // Search by title (partial match, case-insensitive)
+          if (parameters.title) {
+            matches = matches && book.title.toLowerCase().includes(parameters.title.toLowerCase());
+          }
+
+          // Search by authors (one or more authors, case-insensitive, now with partial match)
+          if (parameters.authors) {
+            const searchAuthors = parameters.authors.split(',').map(a => a.trim().toLowerCase());
+            const bookAuthors = book.authors.split(',').map(a => a.trim().toLowerCase());
+            // This is the updated logic to allow partial author name searching
+            const authorMatch = searchAuthors.some(searchAuthor => 
+              bookAuthors.some(bookAuthor => bookAuthor.includes(searchAuthor))
+            );
+            matches = matches && authorMatch;
+          }
+
+          // Search by genres (one or more genres, case-insensitive)
+          if (parameters.genres) {
+            const searchGenres = parameters.genres.split(',').map(g => g.trim().toLowerCase());
+            const bookGenres = book.genres.split(',').map(g => g.trim().toLowerCase());
+            const genreMatch = searchGenres.some(searchGenre => bookGenres.includes(searchGenre));
+            matches = matches && genreMatch;
+          }
+
+          // Search by year range
+          if (parameters.yearAfter) {
+            matches = matches && (book.year >= parameters.yearAfter);
+          }
+          if (parameters.yearBefore) {
+            matches = matches && (book.year <= parameters.yearBefore);
+          }
+          
+          return matches;
+        });
+
+        const formattedResults = formatBookList(filteredBooks);
+        return {
+          success: true,
+          message: `**Search Results:**\n\n${formattedResults}`
+        };
+      }
+
+      case 'list_all_books': {
+        console.log("Attempting to list all books.");
+        const allBooks = (await getBooks()).data;
+        const formattedAllBooks = formatBookList(allBooks);
+        return {
+          success: true,
+          message: `**All Books:**\n\n${formattedAllBooks}`
+        };
+      }
+
+      case 'book_help': {
+        
+        console.log("Handling book help/conversation request:", operation.query);
+        
+        const userQuery = operation.query.toLowerCase();
+        let contextualPrompt;
+        
+        // Determine the type of request and provide appropriate context
+        if (userQuery.includes('hello') || userQuery.includes('hi') || userQuery.includes('hey')) {
+          contextualPrompt = `The user greeted you with: "${operation.query}". Respond warmly and briefly introduce yourself as their book catalog management assistant. Mention that you can help them add, search, update, delete, and manage their books using natural language.`;
+        } else if (userQuery.includes('thank') || userQuery.includes('thanks')) {
+          contextualPrompt = `The user thanked you with: "${operation.query}". Respond politely and let them know you're happy to help with their book catalog management needs.`;
+        } else if (userQuery.includes('bye') || userQuery.includes('goodbye') || userQuery.includes('see you')) {
+          contextualPrompt = `The user said goodbye with: "${operation.query}". Respond warmly and let them know you'll be here whenever they need help managing their book catalog.`;
+        } else {
+          contextualPrompt = `You are a helpful assistant for a book catalog management system. The user asked: "${operation.query}". 
+          
+          Please provide a friendly, informative response about the book management system. You can help with:
+          - Adding books: Users can say things like "Add Dune by Frank Herbert" or "Add a book called '1984' by George Orwell published in 1949"
+          - Searching books: Users can search by title, author, genre, or year ranges like "Find sci-fi books" or "Show books by Stephen King"
+          - Updating books: Users can update book details like "Update the genre of Dune to Science Fiction"
+          - Deleting books: Users can remove books like "Delete the book Dune"
+          - Listing all books: Users can see all books with "List all books" or "Show me all books"
+          
+          Keep your response helpful, friendly, and focused on book management features.`;
+        }
+        
+        // Call Cohere API in general conversation mode for help/conversation
+        const helpResponse = await callCohereAPI(
+          contextualPrompt,
+          [], 
+          'general'
+        );
+        
+        return {
+          success: true,
+          message: helpResponse
+        };
+      }
+
+      default:
+        return {
+          success: false,
+          message: "Sorry, I don't know how to handle that request yet. I can only 'add', 'update', 'delete', 'search', and 'list all books' at the moment."
+        };
+    }
+  } catch (error) {
+    console.error('Error executing book operation:', error);
+    return {
+      success: false,
+      message: `An error occurred while processing your request: ${error.message}`
+    };
+  }
+};
+
+
+// Function to call Cohere API
+export const callCohereAPI = async (message, conversationHistory = [], mode = 'general') => {
+  try {
+    const systemPrompt = mode === 'book_management' ? BOOK_MANAGEMENT_PROMPT : GENERAL_CONVERSATION_PROMPT;
+
+    // Cohere's payload structure with new parameters
+    const payload = {
+      model: 'command-r-plus', // Specify the model for the API call
+      chat_history: conversationHistory,
+      message: message,
+      prompt_truncation: "AUTO",
+      connectors: [{ "id": "web-search" }], // Example connector, can be removed if not needed
+      preamble: systemPrompt, // Use preamble for the system prompt
+      temperature: 0.1, // Lower temperature for more consistent structured responses
+      max_tokens: 300 // Set a token limit for the response
+    };
+
+    const response = await axios.post(COHERE_API_URL, payload, {
+      headers: {
+        'Authorization': `Bearer ${COHERE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
     });
-    return extractIntentFromMessage(message);
-  }
-}
+    
+    // Log the full API response for debugging
+    console.log('Cohere API raw response:', response.data);
 
-// Helper function to detect if a message is clearly a book update request
-function isBookUpdateRequest(message) {
-  const lowerMessage = message.toLowerCase();
-  const hasUpdateKeyword = lowerMessage.includes('update') || lowerMessage.includes('change') || lowerMessage.includes('modify');
-  const hasBookContext = lowerMessage.includes('book') || lowerMessage.includes('title') || lowerMessage.includes('author') || lowerMessage.includes('genre') || lowerMessage.includes('year') || lowerMessage.includes('published');
-  return hasUpdateKeyword && hasBookContext;
-}
-
-// Enhanced fallback function with better update intent detection
-function extractIntentFromMessage(message) {
-  const lowerMessage = message.toLowerCase();
-
-  // Enhanced update detection
-  if ((lowerMessage.includes('update') || lowerMessage.includes('change') || lowerMessage.includes('modify')) &&
-      (lowerMessage.includes('book') || lowerMessage.includes('title') || lowerMessage.includes('author') || 
-       lowerMessage.includes('genre') || lowerMessage.includes('year') || lowerMessage.includes('published'))) {
-    
-    // Try to extract update details
-    let fieldsToUpdate = {};
-    let title = null, author = null, genre = null, year = null;
-
-    // Extract what to update
-    if (lowerMessage.includes('title') && lowerMessage.includes(' to ')) {
-      const titleMatch = message.match(/(?:title.*?to\s*["']?([^"']+)["']?)|(?:to\s*["']([^"']+)["'])/i);
-      if (titleMatch) fieldsToUpdate.title = titleMatch[1] || titleMatch[2];
-    }
-    
-    if (lowerMessage.includes('author') && lowerMessage.includes(' to ')) {
-      const authorMatch = message.match(/author.*?to\s*["']?([^"']+)["']?/i);
-      if (authorMatch) fieldsToUpdate.author = authorMatch[1];
-    }
-    
-    if (lowerMessage.includes('genre') && lowerMessage.includes(' to ')) {
-      const genreMatch = message.match(/genre.*?to\s*["']?([^"']+)["']?/i);
-      if (genreMatch) fieldsToUpdate.genre = genreMatch[1];
-    }
-    
-    if (lowerMessage.includes('year') && lowerMessage.includes(' to ')) {
-      const yearMatch = message.match(/year.*?to\s*(\d{4})/i);
-      if (yearMatch) fieldsToUpdate.year = parseInt(yearMatch[1]);
-    }
-
-    // Extract book identification criteria
-    const titleQuoteMatch = message.match(/["']([^"']+)["']/);
-    if (titleQuoteMatch) title = titleQuoteMatch[1];
-    
-    const authorMatch = message.match(/by\s+([^,\s]+(?:\s+[^,\s]+)*)/i);
-    if (authorMatch) author = authorMatch[1];
-    
-    const genreMatch = message.match(/in\s+([^\s,]+(?:\s+[^\s,]+)*)\s+genre/i);
-    if (genreMatch) genre = genreMatch[1];
-    
-    const yearMatch = message.match(/published\s+in\s+(\d{4})/i);
-    if (yearMatch) year = parseInt(yearMatch[1]);
-
-    return [{
-      intent: 'update',
-      data: {
-        title,
-        author,
-        genre,
-        year,
-        query: null,
-        range: null,
-        fieldsToUpdate: Object.keys(fieldsToUpdate).length > 0 ? fieldsToUpdate : null
+    if (mode === 'book_management') {
+      const rawText = response.data.text;
+      
+      // Fix: Add a check for an unexpected success message
+      if (rawText && rawText.startsWith('✅ Operation successful!')) {
+          console.error("The AI model returned an unexpected success message instead of JSON. There may be a system configuration issue.");
+          throw new Error("AI model returned an unexpected response format. Please report this issue.");
       }
-    }];
-  }
 
-  // Other intent detection 
-  if (lowerMessage.includes('add') || lowerMessage.includes('create')) {
-    return [{ intent: 'add', data: { query: message } }];
-  } else if (lowerMessage.includes('delete') || lowerMessage.includes('remove')) {
-    return [{ intent: 'delete', data: { query: message } }];
-  } else if (lowerMessage.includes('search') || lowerMessage.includes('find') || lowerMessage.includes('list')) {
-    return [{ intent: 'search', data: { query: message } }];
+      let jsonString;
+      
+      // Check if the response is wrapped in a markdown code block
+      if (rawText && rawText.startsWith('```json')) {
+        // Extract the JSON string from inside the markdown block
+        jsonString = rawText.substring(rawText.indexOf('\n') + 1, rawText.lastIndexOf('```'));
+      } else {
+        // If not, assume the raw text is the JSON string
+        jsonString = rawText;
+      }
+      
+      try {
+        const parsedJson = JSON.parse(jsonString);
+        // Log the parsed JSON for debugging
+        console.log('Parsed JSON from API:', parsedJson);
+        return parsedJson;
+      } catch (e) {
+        console.error("Failed to parse JSON from Cohere API response:", jsonString);
+        throw new Error("Invalid JSON response from AI model.");
+      }
+    } else {
+      // General chat mode returns plain text
+      return response.data.text;
+    }
+  } catch (error) {
+    console.error('API call Error:', error.response ? error.response.data : error.message);
+    throw new Error('Failed to get response from AI API. Please check your network and API key.');
   }
+};
 
-  // Conversational intents
-  if (lowerMessage.includes('hi') || lowerMessage.includes('hello') || lowerMessage.includes('good morning') || lowerMessage.includes('good afternoon') || lowerMessage.includes('good evening') || lowerMessage.includes('hey')) {
-    return [{ intent: 'greeting', data: { query: message } }];
-  }
-  if (lowerMessage.includes('what can you do') || lowerMessage.includes('what is this app about') || lowerMessage.includes('how to use this app') || lowerMessage.includes('app about') || lowerMessage.includes('your functions')) {
-    return [{ intent: 'capability_query', data: { query: message } }];
-  }
-  if (lowerMessage.includes('help') || lowerMessage.includes('how')) {
-    return [{ intent: 'help', data: { query: message } }];
-  }
 
-  // Out of scope for non-book topics
-  if (lowerMessage.includes('weather') || lowerMessage.includes('joke') || lowerMessage.includes('movie') || lowerMessage.includes('news')) {
-    return [{ intent: 'out_of_scope', data: { query: message } }];
+// Helper function to format the book list for display in a more compact way.
+// This function now renders each book on a single line.
+export const formatBookList = (books) => {
+  if (!books || books.length === 0) {
+    return "No books found in the catalog.";
   }
+  
+  return books.map((book, index) => 
+    `${index + 1}. 📚${book.title}: by ${book.authors} (${book.year}) [${book.genres}]\n`
+  ).join('\n');
+};
 
-  // Default to unrecognized if no specific intent keywords found
-  return [{ intent: 'unrecognized', data: { query: message } }];
-}
+// Helper function to format a single book's details
+// This function no longer includes its own header to avoid redundancy
+export const formatBookDetails = (book) => {
+  return `📚 **Title:** ${book.title}
+✍️ **Authors:** ${book.authors}
+🎭 **Genres:** ${book.genres}
+😊 **Moods:** ${book.moods || 'Not specified'}
+📅 **Year:** ${book.year}
+🆔 **ID:** ${book.id}
+🌐 **Open Library ID:** ${book.openLibraryId || 'Not specified'}
+`;
+};

@@ -2,6 +2,7 @@ Add book titled "Sapiens" by Yuval Noah Harari published in 2011
 Add book titled "Dune" by Frank Herbert published in 1965 of the genre Science Fiction
 Add book "Clean Code" by Robert C. Martin in genre Programming published in 2008
 Add book by George Orwell titled "1984" published in 1949 of genre sci
+Add book titled "Neuromancer" by William Gibson published in 1984 of genre Cyberpunk
 Find books in genre Science Fiction
 Find books after 1950 and before 2010
 List all books
@@ -10,7 +11,6 @@ Search for books by author Martin
 Update genre of book by Robert C. Martin to Software
 Update year of "Sapiens" to 2014
 Change genre of "Sapiens" to History and year to 2015
-Add book titled "Neuromancer" by William Gibson published in 1984 of genre Cyberpunk
 Update genre of "Neuromancer" published in 1984 to Sci-Fi
 Update year of book by Robert C. Martin in Software genre to 2010
 Search for book starting with sapi
@@ -28,7 +28,6 @@ Update year of "Clean Code" to 2010
 Update author of "Sapiens" to Yuval Harari
 
 Delete book titled "Clean Code" by Robert C. Martin
-Remove book in genre Sci-Fi published in 1984
 Delete book titled "Sapiens" by Yuval Harari published in 2015
 
 
@@ -44,8 +43,6 @@ What can you do?
 How do I add a book?
 
 How to delete a book.
-
-Tell me more about this app.
 
 Can you recommend a movie? (Out of scope test)
 
