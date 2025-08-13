@@ -90,7 +90,7 @@ export default function BookListTailwind({ selectedGenres }) {
   };
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen pt-28">
       {/* Search and Add Book Section */}
       <div className="bg-white/70 backdrop-blur-lg rounded-2xl shadow-xl shadow-slate-200/50 p-6 mb-8 border border-white/20">
         <div className="flex flex-col sm:flex-row gap-4 items-center">
