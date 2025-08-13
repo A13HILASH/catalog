@@ -1,7 +1,7 @@
 Add book titled "Sapiens" by Yuval Noah Harari published in 2011
 Add book titled "Dune" by Frank Herbert published in 1965 of the genre Science Fiction
 Add book "Clean Code" by Robert C. Martin in genre Programming published in 2008
-Add book by George Orwell titled "1984" published in 1949 of genre sci
+Add book by George Orwell titled "1984" published in 1949 of genre science fiction
 Add book titled "Neuromancer" by William Gibson published in 1984 of genre Cyberpunk
 Find books in genre Science Fiction
 Find books after 1950 and before 2010
@@ -22,7 +22,7 @@ List books by George Orwell published before 1950
 Search book title starting with cle
 Search book title containing code
 
-Find authors with genre Software
+What is the description of book Clean Code
 Change the title of book by Frank Herbert published in 1965 to "Dune Saga"
 Update year of "Clean Code" to 2010
 Update author of "Sapiens" to Yuval Harari

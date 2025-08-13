@@ -1,0 +1,56 @@
+
+1. Create a Free Cloudinary Account:------------------------------------
+Go to the Cloudinary website: https://cloudinary.com/
+
+Click the "Sign Up" button, usually in the top right corner.
+
+You can sign up using a Google or GitHub account, or with your email address. Follow the prompts to create your account.
+
+After signing up, you will be directed to your account's main dashboard.
+
+2. Locate Your API Credentials:-----------------------------------------
+Your API credentials are all displayed prominently on the main dashboard of your account. These are the keys your backend server will need to authenticate and interact with Cloudinary.
+
+
+Once you're on the dashboard, look for the section titled "Account Details" or similar.
+
+You will find the three key pieces of information you need:
+
+Cloud Name: This is a unique name for your cloud environment (e.g., d_example_cloud).
+
+API Key: A public identifier for your account.
+
+API Secret: A private, secure key. This must be kept confidential and should only be used on your backend server. Never expose it in your frontend code.
+
+
+
+3. Store Your API Keys:-------------------------------------------------
+
+To use these keys securely in your backend, you should store them as environment variables rather than hard-coding them directly into your source code. This is a best practice that prevents them from being accidentally committed to a public repository like Git
+
+
+----------------------------------------------------------------------------------
+How to Set Up the Upload Preset:
+
+1 Log in to your Cloudinary dashboard.
+
+2 In the left-hand navigation menu, go to Settings (the gear icon).
+
+3 Click on the "Upload" tab.
+
+4 Scroll down to the "Upload presets" section.
+
+5 Click the "Add upload preset" button.
+
+6 For "Signing Mode", choose "Unsigned".
+
+7 Give your preset a name, for example, book_covers_preset.
+
+8 Save the preset.
+
+NOTE:-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+In src/components/apiUtil.js
+
+Update the placeholders with your credentials:
+export const CLOUDINARY_CLOUD_NAME = "YOUR_CLOUDINARY_CLOUD_NAME";
+export const CLOUDINARY_UPLOAD_PRESET = "your_cloudinary_unsigned_upload_preset"

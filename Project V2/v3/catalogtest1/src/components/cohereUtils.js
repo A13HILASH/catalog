@@ -1,14 +1,5 @@
 import axios from 'axios';
-
-// Book management API endpoints
-const API_BASE = "http://localhost:4540/api/books";
-
-// Book API functions
-export const getBooks = () => axios.get(API_BASE);
-export const getBook = (id) => axios.get(`${API_BASE}/${id}`);
-export const addBook = (book) => axios.post(API_BASE, book);
-export const updateBook = (id, book) => axios.put(`${API_BASE}/${id}`, book);
-export const deleteBook = (id) => axios.delete(`${API_BASE}/${id}`);
+import {getBooks, addBook, updateBook, deleteBook} from '../services/bookService'
 
 // Cohere API configuration
 const COHERE_API_URL = 'https://api.cohere.ai/v1/chat';
@@ -25,12 +16,12 @@ CRITICAL INSTRUCTIONS:
 2. The JSON object must have a top-level "intent" key and other keys based on the intent.
 3. You MUST NOT carry over information or parameters from previous requests. Base your response solely on the latest user command.
 
-For the "list_all_books" intent, your JSON must follow this structure:
+For the "list_all_books" intent:
 {
   "intent": "list_all_books"
 }
 
-For the "add" intent, your JSON must follow this structure:
+For the "add" intent:
 {
   "intent": "add",
   "bookData": {
@@ -39,12 +30,13 @@ For the "add" intent, your JSON must follow this structure:
     "genres": "Genre 1, Genre 2",
     "moods": "mood 1, mood 2",
     "year": 2024,
+    "description": "Use the description exactly as provided by the user. If no description is provided, generate exactly one concise sentence (~20 words) summarizing the book using only title, authors, genres, moods, and year.",
     "coverUrl": "https://example.com/cover.jpg",
     "openLibraryId": "OL123456"
   }
 }
 
-For the "update" intent, your JSON must follow this structure:
+For the "update" intent:
 {
   "intent": "update",
   "searchCriteria": {
@@ -56,7 +48,7 @@ For the "update" intent, your JSON must follow this structure:
   }
 }
 
-For the "delete" intent, your JSON must follow this structure. You must provide a search criteria.
+For the "delete" intent:
 {
   "intent": "delete",
   "searchCriteria": {
@@ -64,36 +56,78 @@ For the "delete" intent, your JSON must follow this structure. You must provide 
   }
 }
 
-For the "search" intent, your JSON must follow this flexible structure. Only include the fields that are specified by the user. If the user asks for multiple authors or genres, represent them as a comma-separated string.
+For the "search" intent (filtering books, returns full book info):
 {
   "intent": "search",
   "parameters": {
     "title": "partial title",
     "authors": "Author1, Author2",
     "genres": "Genre1, Genre2",
+    "moods": "mood 1, mood 2",
     "yearAfter": 2000,
     "yearBefore": 2020
   }
 }
 
-For the "book_help" intent (when users ask for help, assistance, general questions about the app, greetings, thanks, or other conversational messages), your JSON must follow this structure:
+For the "get_description" intent (return only the book's description):
 {
-  "intent": "book_help",
-  "query": "user's original question or message"
+  "intent": "get_description",
+  "searchCriteria": {
+    "title": "Book Title",
+    "year": 1997
+  }
 }
 
-You should extract as much information as possible from the user's request. If a field is not provided, do not include it in the JSON object. Authors, genres, and moods should be comma-separated strings. The year should be a number.
+For the "book_details" intent (return full details of book based on search criteria with partial matching):
+{
+  "intent": "book_details",
+  "searchCriteria": {
+    "title": "partial or full title",
+    "authors": "Author1, Author2",
+    "genres": "Genre1, Genre2",
+    "moods": "mood 1, mood 2",
+    "year": "optional number",
+    "yearAfter": "optional number",
+    "yearBefore": "optional number"
+  }
+}
 
-EXAMPLE 1 (LIST ALL BOOKS):
+
+For the "get_field" intent (return only one specific field of a book): 
+  Purpose: Retrieve ONLY a single attribute (e.g., authors, genres, moods, year) of one or more books.  
+   {
+     "intent": "get_field",
+     "searchCriteria": {
+       "title": "optional",
+       "authors": ["optional", "array"],
+       "genres": ["optional", "array"],
+       "moods": ["optional", "array"],
+       "year": optional_number,
+       "yearAfter": optional_number,
+       "yearBefore": optional_number
+     },
+     "field": "authors|genres|moods|year|coverUrl|openLibraryId"
+   }
+The "field" value must exactly match one of these keys: "authors", "genres", "moods", "year", "coverUrl", "openLibraryId".
+
+For the "book_help" intent (help, greetings, thanks, etc.):
+{
+  "intent": "book_help",
+  "query": "user's original message"
+}
+
+---
+
+EXAMPLES
+
+LIST ALL BOOKS:
 User: List all books
-Your response MUST be:
 {
   "intent": "list_all_books"
 }
 
-EXAMPLE 2 (ADD):
+ADD:
 User: Add a book called 'Dune' by Frank Herbert, published in 1965, genre Science Fiction
-Your response MUST be:
 {
   "intent": "add",
   "bookData": {
@@ -104,9 +138,8 @@ Your response MUST be:
   }
 }
 
-EXAMPLE 3 (UPDATE):
+UPDATE:
 User: Find the book "Neuromancer" published in 1984 and update its genre to "Sci-Fi"
-Your response MUST be:
 {
   "intent": "update",
   "searchCriteria": {
@@ -118,9 +151,8 @@ Your response MUST be:
   }
 }
 
-EXAMPLE 4 (DELETE):
+DELETE:
 User: Delete the book named 'Dune'
-Your response MUST be:
 {
   "intent": "delete",
   "searchCriteria": {
@@ -128,9 +160,8 @@ Your response MUST be:
   }
 }
 
-EXAMPLE 5 (COMPLEX SEARCH):
+COMPLEX SEARCH:
 User: Find sci-fi books by Arthur C. Clarke after 1960
-Your response MUST be:
 {
   "intent": "search",
   "parameters": {
@@ -140,7 +171,79 @@ Your response MUST be:
   }
 }
 
-EXAMPLE 6 (HELP/ASSISTANCE/CONVERSATION):
+User: Search book title starting with har  
+{
+  "intent": "search",
+  "parameters": {
+    "title": "har"
+  }
+}
+
+User:Find books by J.K. Rowling, William Gibson or George Orwell
+{
+  "intent": "search",
+  "parameters": {
+    "authors": "J.K. Rowling, William Gibson, George Orwell"
+  }
+}
+
+GET DESCRIPTION:
+User: Search for description of book 'Dune'
+{
+  "intent": "get_description",
+  "searchCriteria": {
+    "title": "Dune"
+  }
+}
+
+GET FIELD:
+User: Find authors of the book 'Dune'
+{
+  "intent": "get_field",
+  "searchCriteria": {
+    "title": "Dune"
+  },
+  "field": "authors"
+}
+
+User: Find genre of the book 'Dune' released in 1965
+{
+  "intent": "get_field",
+  "searchCriteria": {
+    "title": "Dune",
+    "year": 1965
+  },
+  "field": "genres"
+}
+
+User:Find authors in genre Software
+{
+  "intent": "get_field",
+  "searchCriteria": {
+    "genres": "Software"
+  },
+  "field": "authors"
+}
+
+BOOKDETAILS:
+User:Give details of book Dune Saga
+{
+  "intent": "book_details",
+  "searchCriteria": {
+    "title": "Dune Saga"
+  }
+}
+
+User:Get book Dune Saga
+{
+  "intent": "book_details",
+  "searchCriteria": {
+    "title": "Dune Saga"
+  }
+}
+
+
+HELP/ASSISTANCE/CONVERSATION:
 User: What can you do?
 Your response MUST be:
 {
@@ -358,6 +461,61 @@ export const executeBookOperation = async (operation) => {
         };
       }
 
+      case 'get_description': {
+        console.log("Fetching description for:", searchCriteria);
+      
+        const allBooks = (await getBooks()).data;
+      
+        const matchingBooks = allBooks.filter(book =>
+          Object.keys(searchCriteria).every(key => book[key] === searchCriteria[key])
+        );
+      
+        if (matchingBooks.length === 0) {
+          return {
+            success: false,
+            message: "No book found matching the provided criteria."
+          };
+        } else if (matchingBooks.length > 1) {
+          const bookList = formatBookList(matchingBooks);
+          return {
+            success: false,
+            message: `Found multiple books matching your criteria. Please be more specific.\n\nMatching books:\n\n${bookList}`
+          };
+        } else {
+          const book = matchingBooks[0];
+          return {
+            success: true,
+            message: `**Description for "${book.title}":**\n\n${book.description || "No description available."}`
+          };
+        }
+      }
+      
+      case 'get_field': {
+        console.log(`Fetching field '${operation.field}' for:`, searchCriteria); 
+
+        const allBooks = (await getBooks()).data;
+
+        const matches = allBooks.filter(book => 
+          Object.keys(searchCriteria).every(key => book[key] === searchCriteria[key])
+        );
+
+        if (!matches.length) 
+          return { success: false, message: "No matching book found." };
+
+        if (matches.length > 1) 
+          return { success: false, message: "Multiple matches found. Please be more specific." };
+
+        const book = matches[0];
+
+        // Use formatBookDetails only if searchCriteria has exactly one key and it's "title"
+        if (Object.keys(searchCriteria).length === 1 && 'title' in searchCriteria) {
+          return { success: true, message: formatBookDetails(book) };
+        }
+
+        const value = book[operation.field];
+        return { success: true, message: `**${operation.field.charAt(0).toUpperCase() + operation.field.slice(1)} for "${book.title}":**\n\n${value || "Not specified"}` };
+      }
+
       case 'list_all_books': {
         console.log("Attempting to list all books.");
         const allBooks = (await getBooks()).data;
@@ -367,6 +525,63 @@ export const executeBookOperation = async (operation) => {
           message: `**All Books:**\n\n${formattedAllBooks}`
         };
       }
+
+      case 'book_details': {
+        console.log('Fetching detailed book info for:', searchCriteria);
+      
+        const allBooks = (await getBooks()).data;
+      
+        // Helper to do case-insensitive partial matching for strings
+        const matchesCriteria = (book, criteria) => {
+          return Object.entries(criteria).every(([key, value]) => {
+            if (!value) return true; // ignore empty criteria
+      
+            if (key === 'title' && typeof value === 'string') {
+              // Partial case-insensitive match for title
+              return book.title.toLowerCase().includes(value.toLowerCase());
+            }
+      
+            if (['authors', 'genres', 'moods'].includes(key)) {
+              // If criteria value is array or string, match if any overlap (case-insensitive)
+              const bookValues = (typeof book[key] === 'string' ? book[key].split(',').map(s => s.trim().toLowerCase()) : []);
+              const criteriaValues = Array.isArray(value) ? value.map(s => s.toLowerCase()) : [value.toLowerCase()];
+              return criteriaValues.some(cv => bookValues.includes(cv));
+            }
+      
+            if (key === 'year') {
+              return book.year === value;
+            }
+      
+            if (key === 'yearAfter') {
+              return book.year > value;
+            }
+      
+            if (key === 'yearBefore') {
+              return book.year < value;
+            }
+      
+            // fallback strict equality for other keys
+            return book[key] === value;
+          });
+        };
+      
+        const matches = allBooks.filter(book => matchesCriteria(book, searchCriteria));
+      
+        if (!matches.length) {
+          return { success: false, message: "No matching book found." };
+        }
+      
+        if (matches.length > 1) {
+          return {
+            success: false,
+            message: `Multiple matches found (${matches.length}). Please be more specific.`,
+          };
+        }
+      
+        const book = matches[0];
+        return { success: true, message: formatBookDetails(book) };
+      }
+      
 
       case 'book_help': {
         
@@ -438,7 +653,7 @@ export const callCohereAPI = async (message, conversationHistory = [], mode = 'g
       connectors: [{ "id": "web-search" }], // Example connector, can be removed if not needed
       preamble: systemPrompt, // Use preamble for the system prompt
       temperature: 0.1, // Lower temperature for more consistent structured responses
-      max_tokens: 300 // Set a token limit for the response
+      max_tokens: 1000 // Set a token limit for the response
     };
 
     const response = await axios.post(COHERE_API_URL, payload, {
@@ -513,5 +728,7 @@ export const formatBookDetails = (book) => {
 📅 **Year:** ${book.year}
 🆔 **ID:** ${book.id}
 🌐 **Open Library ID:** ${book.openLibraryId || 'Not specified'}
+
+📜 **Description:** ${book.description || 'Not specified'}
 `;
 };
