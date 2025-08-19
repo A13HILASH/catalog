@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "hl+nlf/wbeU=",
+  "dgSpecHash": "88qh1cuSqMg=",
   "success": true,
-  "projectFilePath": "/home/abhi/code/v2/Project V2/v3/BookCatalogueAPI/BookCatalogueAPI.csproj",
+  "projectFilePath": "/home/abhi/code/project ver2/BookCatalogue/BookCatalogueAPI/BookCatalogueAPI.csproj",
   "expectedPackageFiles": [
     "/home/abhi/.nuget/packages/azure.core/1.38.0/azure.core.1.38.0.nupkg.sha512",
     "/home/abhi/.nuget/packages/azure.identity/1.11.4/azure.identity.1.11.4.nupkg.sha512",

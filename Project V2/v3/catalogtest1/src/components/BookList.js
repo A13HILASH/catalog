@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { getBooks, deleteBook } from "../services/bookService";
 import { useSnackbar } from "notistack";
 import { useNavigate } from "react-router-dom";
+import BookDetailModal from "./BookDetailModal"; // Import the modal component
 import '../index.css';
 
 // This component now accepts the 'selectedGenres' prop from App.js
@@ -16,6 +17,10 @@ export default function BookListTailwind({ selectedGenres }) {
   const [page, setPage] = useState(0);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [bookToDelete, setBookToDelete] = useState(null);
+  
+  // Modal state
+  const [selectedBook, setSelectedBook] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
 
   const rowsPerPage = 9;
   const fallbackImage = "https://via.placeholder.com/400x300?text=No+Cover";
@@ -87,6 +92,37 @@ export default function BookListTailwind({ selectedGenres }) {
       setDeleteDialogOpen(false);
       setBookToDelete(null);
     }
+  };
+
+  // Handle book card click to open modal
+  const handleBookClick = (book) => {
+    // Transform the book data to match the Google Books API format expected by the modal
+    const transformedBook = {
+      volumeInfo: {
+        title: book.title,
+        subtitle: book.subtitle || '',
+        authors: Array.isArray(book.authors) ? book.authors : [book.authors],
+        publisher: book.publisher || '',
+        publishedDate: book.year || book.publishedDate || '',
+        pageCount: book.pageCount || book.pages || '',
+        language: book.language || 'en',
+        categories: Array.isArray(book.genres) ? book.genres : [book.genres].filter(Boolean),
+        description: book.description || book.summary || '',
+        imageLinks: {
+          thumbnail: book.coverUrl || fallbackImage
+        },
+        previewLink: book.openLibraryId || '',
+        bookUrl: book.bookUrl || '' // Add bookUrl field for Cloudinary markdown content
+      }
+    };
+    
+    setSelectedBook(transformedBook);
+    setModalOpen(true);
+  };
+
+  const handleModalClose = () => {
+    setModalOpen(false);
+    setSelectedBook(null);
   };
 
   return (
@@ -174,10 +210,11 @@ export default function BookListTailwind({ selectedGenres }) {
           {paginatedBooks.map((book, index) => (
             <div
               key={book.id}
-              className="group bg-white/70  rounded-2xl shadow-lg hover:shadow-2xl border border-white/20 overflow-hidden flex flex-col transition-all duration-300 transform hover:scale-[1.02] hover:rotate-1"
+              className="group bg-white/70 rounded-2xl shadow-lg hover:shadow-2xl border border-white/20 overflow-hidden flex flex-col transition-all duration-300 transform hover:scale-[1.02] hover:rotate-1 cursor-pointer"
               style={{
                 animationDelay: `${index * 100}ms`
               }}
+              onClick={() => handleBookClick(book)} // Add click handler for the entire card
             >
               <div className="relative w-full h-56 overflow-hidden rounded-t-2xl">
                 <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent z-10"></div>
@@ -193,6 +230,18 @@ export default function BookListTailwind({ selectedGenres }) {
                   <div className="absolute top-3 left-3 z-20">
                     <span className="px-2 py-1 bg-white/90 backdrop-blur-sm text-indigo-600 text-xs font-medium rounded-full">
                       {book.genres[0]}
+                    </span>
+                  </div>
+                )}
+
+                {/* Book type indicator */}
+                {book.bookUrl && book.bookUrl.includes('cloudinary.com') && (
+                  <div className="absolute top-3 right-3 z-20">
+                    <span className="px-2 py-1 bg-emerald-500/90 backdrop-blur-sm text-white text-xs font-medium rounded-full flex items-center space-x-1">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                      </svg>
+                      <span>READ</span>
                     </span>
                   </div>
                 )}
@@ -217,7 +266,7 @@ export default function BookListTailwind({ selectedGenres }) {
                 <div className="flex justify-end items-center space-x-2 mt-4">
                   <button
                     onClick={(e) => {
-                      e.stopPropagation();
+                      e.stopPropagation(); // Prevent card click when clicking edit
                       nav(`/edit/${book.id}`);
                     }}
                     className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-800 text-sm font-medium rounded-lg transition-all duration-200 flex items-center space-x-1"
@@ -229,7 +278,7 @@ export default function BookListTailwind({ selectedGenres }) {
                   </button>
                   <button
                     onClick={(e) => {
-                      e.stopPropagation();
+                      e.stopPropagation(); // Prevent card click when clicking delete
                       confirmDelete(book);
                     }}
                     disabled={deletingId === book.id}
@@ -261,6 +310,13 @@ export default function BookListTailwind({ selectedGenres }) {
           </button>
         </div>
       )}
+
+      {/* Book Detail Modal */}
+      <BookDetailModal
+        open={modalOpen}
+        handleClose={handleModalClose}
+        book={selectedBook}
+      />
 
       {/* Delete Confirmation Modal */}
       {deleteDialogOpen && (

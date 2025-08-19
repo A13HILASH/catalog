@@ -9,6 +9,8 @@ namespace BookCatalogueAPI.Models
         public int Year { get; set; }
         public string CoverUrl { get; set; } = string.Empty;
         public string OpenLibraryId { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string BookUrl { get; set; } = string.Empty;
 
         // Navigation properties for the many-to-many relationships
         public ICollection<BookAuthor> BookAuthors { get; set; } = new List<BookAuthor>();

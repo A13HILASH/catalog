@@ -11,9 +11,8 @@ export const COHERE_API_URL = 'https://api.cohere.ai/v1/chat';
 
 // Constants for Gemini and Cloudinary
 export const GEMINI_API_KEY = process.env.REACT_APP_GEMINI_API_KEY;
-export const CLOUDINARY_CLOUD_NAME = "YOUR_CLOUDINARY_CLOUD_NAME";
-export const CLOUDINARY_UPLOAD_PRESET = "your_cloudinary_unsigned_upload_preset";
-
+export const CLOUDINARY_CLOUD_NAME = process.env.REACT_APP_CLOUDINARY_CLOUD_NAME;
+export const CLOUDINARY_UPLOAD_PRESET = process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET;
 /**
  * Calls the Cohere API to generate text based on a prompt and preamble.
  * @param {string} message The main prompt message.

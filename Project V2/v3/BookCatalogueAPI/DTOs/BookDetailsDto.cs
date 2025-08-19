@@ -12,5 +12,7 @@ namespace BookCatalogueAPI.DTOs
         public string CoverUrl { get; set; } = string.Empty;
         public string OpenLibraryId { get; set; } = string.Empty;
         public List<string> Moods { get; set; } = new List<string>();
+        public string Description { get; set; } = string.Empty;
+        public string BookUrl { get; set; } = string.Empty;
     }
 }

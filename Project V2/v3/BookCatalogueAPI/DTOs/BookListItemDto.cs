@@ -10,5 +10,8 @@ namespace BookCatalogueAPI.DTOs
         public string Genres { get; set; } = string.Empty;
         public int Year { get; set; }
         public string CoverUrl { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string BookUrl { get; set; } = string.Empty;
+        public string OpenLibraryId { get; set; } = string.Empty;
     }
 }

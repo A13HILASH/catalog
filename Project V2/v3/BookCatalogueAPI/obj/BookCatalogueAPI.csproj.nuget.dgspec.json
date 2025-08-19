@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "/home/abhi/code/v2/Project V2/v3/BookCatalogueAPI/BookCatalogueAPI.csproj": {}
+    "/home/abhi/code/project ver2/BookCatalogue/BookCatalogueAPI/BookCatalogueAPI.csproj": {}
   },
   "projects": {
-    "/home/abhi/code/v2/Project V2/v3/BookCatalogueAPI/BookCatalogueAPI.csproj": {
+    "/home/abhi/code/project ver2/BookCatalogue/BookCatalogueAPI/BookCatalogueAPI.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/home/abhi/code/v2/Project V2/v3/BookCatalogueAPI/BookCatalogueAPI.csproj",
+        "projectUniqueName": "/home/abhi/code/project ver2/BookCatalogue/BookCatalogueAPI/BookCatalogueAPI.csproj",
         "projectName": "BookCatalogueAPI",
-        "projectPath": "/home/abhi/code/v2/Project V2/v3/BookCatalogueAPI/BookCatalogueAPI.csproj",
+        "projectPath": "/home/abhi/code/project ver2/BookCatalogue/BookCatalogueAPI/BookCatalogueAPI.csproj",
         "packagesPath": "/home/abhi/.nuget/packages/",
-        "outputPath": "/home/abhi/code/v2/Project V2/v3/BookCatalogueAPI/obj/",
+        "outputPath": "/home/abhi/code/project ver2/BookCatalogue/BookCatalogueAPI/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "/home/abhi/.nuget/NuGet/NuGet.Config"

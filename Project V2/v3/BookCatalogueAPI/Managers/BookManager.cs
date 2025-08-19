@@ -28,6 +28,9 @@ namespace BookCatalogueAPI.Managers
                 Title = b.Title,
                 Year = b.Year,
                 CoverUrl = b.CoverUrl,
+                BookUrl = b.BookUrl,
+                OpenLibraryId = b.OpenLibraryId,
+                Description = b.Description,
                 Authors = string.Join(", ", b.BookAuthors.Select(ba => ba.Author.Name)),
                 Genres = string.Join(", ", b.BookGenres.Select(bg => bg.Genre.Name))
             }).ToList();
@@ -47,10 +50,12 @@ namespace BookCatalogueAPI.Managers
                 Title = book.Title,
                 Year = book.Year,
                 CoverUrl = book.CoverUrl,
+                BookUrl = book.BookUrl,
                 OpenLibraryId = book.OpenLibraryId,
                 Authors = book.BookAuthors.Select(ba => ba.Author.Name).ToList(),
                 Genres = book.BookGenres.Select(bg => bg.Genre.Name).ToList(),
-                Moods = book.BookMoods.Select(bm => bm.Mood.Name).ToList()
+                Moods = book.BookMoods.Select(bm => bm.Mood.Name).ToList(),
+                Description = book.Description
             };
         }
 
@@ -62,6 +67,8 @@ namespace BookCatalogueAPI.Managers
                 Year = bookDto.Year,
                 CoverUrl = bookDto.CoverUrl,
                 OpenLibraryId = bookDto.OpenLibraryId,
+                BookUrl = bookDto.BookUrl,
+                Description = bookDto.Description,
                 BookAuthors = new List<BookAuthor>(),
                 BookGenres = new List<BookGenre>(),
                 BookMoods = new List<BookMood>()
@@ -113,7 +120,9 @@ namespace BookCatalogueAPI.Managers
                 Title = book.Title,
                 Year = book.Year,
                 CoverUrl = book.CoverUrl,
+                BookUrl = book.BookUrl,
                 OpenLibraryId = book.OpenLibraryId,
+                Description = book.Description,
                 Authors = authorNames,
                 Genres = genreNames,
                 Moods = moodNames
@@ -131,6 +140,8 @@ namespace BookCatalogueAPI.Managers
             existingBook.Title = bookDto.Title;
             existingBook.Year = bookDto.Year;
             existingBook.CoverUrl = bookDto.CoverUrl;
+            existingBook.BookUrl = bookDto.BookUrl;
+            existingBook.Description = bookDto.Description;
 
             existingBook.BookAuthors.Clear();
             existingBook.BookGenres.Clear();
