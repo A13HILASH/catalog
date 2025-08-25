@@ -3,16 +3,19 @@ Add book titled "Dune" by Frank Herbert published in 1965 of the genre Science F
 Add book "Clean Code" by Robert C. Martin in genre Programming published in 2008
 Add book by George Orwell titled "1984" published in 1949 of genre science fiction
 Add book titled "Neuromancer" by William Gibson published in 1984 of genre Cyberpunk
+
 Find books in genre Science Fiction
 Find books after 1950 and before 2010
 List all books
 Search for Programming books published after 2000
 Search for books by author Martin
+
 Update genre of book by Robert C. Martin to Software
 Update year of "Sapiens" to 2014
 Change genre of "Sapiens" to History and year to 2015
 Update genre of "Neuromancer" published in 1984 to Sci-Fi
 Update year of book by Robert C. Martin in Software genre to 2010
+
 Search for book starting with sapi
 Search for books by Robert C. Martin and William Gibson
 Find books by Robert C. Martin, William Gibson or George Orwell
@@ -22,7 +25,15 @@ List books by George Orwell published before 1950
 Search book title starting with cle
 Search book title containing code
 
-What is the description of book Clean Code
+Add book titled "Dune" by Frank Herbert published in 1965 of the genre Science Fiction
+Find genre of the book 'Dune Saga' released in 1965
+get book by Ernest Cline
+Get description of Ready Player One
+Give details of book Dune Saga
+Find books in genre Science Fiction
+Find books published after 1950 and before 2010
+Search for books by Frank Herbert
+
 Change the title of book by Frank Herbert published in 1965 to "Dune Saga"
 Update year of "Clean Code" to 2010
 Update author of "Sapiens" to Yuval Harari
@@ -55,4 +66,4 @@ I need assistance.
 Book generation sample prompt:
 Write a very short story about a traveler who discovers a hidden library in an ancient city. The story should be about 100 tokens long, no more.
 
-
+https://meet.google.com/gcj-tfgj-fdu

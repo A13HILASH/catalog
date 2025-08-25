@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { addBook } from '../services/bookService';
 import { useSnackbar } from 'notistack';
 import { useNavigate, useLocation } from 'react-router-dom';
+import {CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET } from './apiUtils';
 
 // Import the new custom hooks
 import useDescriptionGenerator from './useDescriptionGenerator';
@@ -23,11 +24,18 @@ export default function AddBook() {
       year: '',
       coverUrl: '',
       openLibraryId: '',
-      description: ''
+      description: '',
+      bookUrl: ''
     }
   );
   
   const [loading, setLoading] = useState(false);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [pdfFile, setPdfFile] = useState(null);
+  const [coverFile, setCoverFile] = useState(null);
+
+  const CLOUDINARY_API_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`;
 
   // Helper function to update the book state from the hooks
   const updateBookState = (name, value) => {
@@ -56,6 +64,100 @@ export default function AddBook() {
     imageHistoryLength
   } = useImageGenerator(book.coverUrl, updateBookState);
 
+  // File upload to Cloudinary
+  const uploadToCloudinary = async (file, resourceType = 'auto') => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+    formData.append('resource_type', resourceType);
+
+    const response = await fetch(CLOUDINARY_API_URL, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to upload file to Cloudinary');
+    }
+
+    const data = await response.json();
+    return data.secure_url;
+  };
+
+  // Handle PDF file selection
+  const handlePdfFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+        setPdfFile(file);
+        enqueueSnackbar('PDF file selected successfully!', { variant: 'success' });
+      } else {
+        enqueueSnackbar('Please select a PDF file only.', { variant: 'error' });
+        e.target.value = '';
+      }
+    }
+  };
+
+  // Handle cover image file selection
+  const handleCoverFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+      if (allowedTypes.includes(file.type)) {
+        setCoverFile(file);
+        // Create preview URL
+        const previewUrl = URL.createObjectURL(file);
+        updateBookState('coverUrl', previewUrl);
+        enqueueSnackbar('Cover image selected successfully!', { variant: 'success' });
+      } else {
+        enqueueSnackbar('Please select a valid image file (JPEG, PNG, WebP).', { variant: 'error' });
+        e.target.value = '';
+      }
+    }
+  };
+
+  // Upload PDF file
+  const handlePdfUpload = async () => {
+    if (!pdfFile) {
+      enqueueSnackbar('Please select a PDF file first.', { variant: 'error' });
+      return;
+    }
+
+    setUploadingPdf(true);
+    try {
+      const pdfUrl = await uploadToCloudinary(pdfFile, 'raw');
+      updateBookState('bookUrl', pdfUrl);
+      setPdfFile(null); // Clear the file after successful upload
+      enqueueSnackbar('PDF uploaded successfully!', { variant: 'success' });
+    } catch (error) {
+      console.error('Error uploading PDF:', error);
+      enqueueSnackbar('Failed to upload PDF. Please try again.', { variant: 'error' });
+    } finally {
+      setUploadingPdf(false);
+    }
+  };
+
+  // Upload cover image
+  const handleCoverUpload = async () => {
+    if (!coverFile) {
+      enqueueSnackbar('Please select a cover image first.', { variant: 'error' });
+      return;
+    }
+
+    setUploadingCover(true);
+    try {
+      const coverUrl = await uploadToCloudinary(coverFile, 'image');
+      updateBookState('coverUrl', coverUrl);
+      setCoverFile(null); // Clear the file after successful upload
+      enqueueSnackbar('Cover image uploaded successfully!', { variant: 'success' });
+    } catch (error) {
+      console.error('Error uploading cover:', error);
+      enqueueSnackbar('Failed to upload cover image. Please try again.', { variant: 'error' });
+    } finally {
+      setUploadingCover(false);
+    }
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     if (name === 'description') {
@@ -70,19 +172,48 @@ export default function AddBook() {
     e.preventDefault();
     setLoading(true);
     
-    // Create the payload matching the exact Swagger API specification
-    const bookDataToAdd = {
-      title: book.title || '',
-      authors: book.authors || '',
-      genres: book.genres || '',
-      moods: book.moods || '',
-      year: book.year ? parseInt(book.year) : 0,
-      coverUrl: book.coverUrl || '',
-      openLibraryId: book.openLibraryId || '',
-      description: description || '', // Use the description from the hook
-    };
-    
     try {
+      // Upload files if they haven't been uploaded yet
+      let finalBookUrl = book.bookUrl;
+      let finalCoverUrl = book.coverUrl;
+
+      // Upload PDF if selected but not uploaded (file exists and no URL set)
+      if (pdfFile && !book.bookUrl) {
+        try {
+          finalBookUrl = await uploadToCloudinary(pdfFile, 'raw');
+          setPdfFile(null); // Clear file after upload
+        } catch (error) {
+          enqueueSnackbar('Failed to upload PDF. Please try uploading manually first.', { variant: 'error' });
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Upload cover if selected but not uploaded (file exists and URL is blob/preview)
+      if (coverFile && book.coverUrl.startsWith('blob:')) {
+        try {
+          finalCoverUrl = await uploadToCloudinary(coverFile, 'image');
+          setCoverFile(null); // Clear file after upload
+        } catch (error) {
+          enqueueSnackbar('Failed to upload cover image. Please try uploading manually first.', { variant: 'error' });
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Create the payload matching the exact Swagger API specification
+      const bookDataToAdd = {
+        title: book.title || '',
+        authors: book.authors || '',
+        genres: book.genres || '',
+        moods: book.moods || '',
+        year: book.year ? parseInt(book.year) : 0,
+        coverUrl: finalCoverUrl || '',
+        openLibraryId: book.openLibraryId || '',
+        description: description || '',
+        bookUrl: finalBookUrl || '',
+      };
+      
       await addBook(bookDataToAdd);
       enqueueSnackbar(editingBook ? 'Book updated successfully!' : 'Book added successfully!', { variant: 'success' });
       navigate('/mybooks');
@@ -108,7 +239,7 @@ export default function AddBook() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Left: Description Tools */}
           <div className="lg:col-span-1 space-y-6">
             <div className="bg-white/70 backdrop-blur-xl rounded-2xl shadow-xl shadow-slate-200/50 p-6 border border-white/20 h-fit">
@@ -208,7 +339,7 @@ export default function AddBook() {
           </div>
 
           {/* Center: Main Form */}
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-2">
             <div className="bg-white/70 backdrop-blur-xl rounded-2xl shadow-xl shadow-slate-200/50 p-8 border border-white/20">
               <div className="flex items-center space-x-3 mb-8">
                 <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
@@ -245,10 +376,66 @@ export default function AddBook() {
                   </div>
                 ))}
 
+                {/* PDF Upload Section */}
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
+                  <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center space-x-2">
+                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    <span>Upload Book File</span>
+                  </h3>
+                  
+                  <div className="space-y-4">
+                    <input
+                      type="file"
+                      accept=".pdf"
+                      onChange={handlePdfFileSelect}
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-700 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-all duration-200"
+                    />
+                    
+                    {pdfFile && (
+                      <div className="flex items-center justify-between bg-white/80 rounded-lg p-3 border border-blue-200">
+                        <span className="text-sm text-slate-600 truncate flex-1">
+                          Selected: {pdfFile.name}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handlePdfUpload}
+                          disabled={uploadingPdf || book.bookUrl}
+                          className="ml-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                        >
+                          {uploadingPdf ? (
+                            <>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                              <span>Uploading...</span>
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                              </svg>
+                              <span>Upload</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+
+                    {book.bookUrl && (
+                      <div className="flex items-center space-x-2 text-green-600 bg-green-50 rounded-lg p-3 border border-green-200">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span className="text-sm font-medium">Book file uploaded successfully!</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 <div className="pt-6">
                   <button
                     type="submit"
-                    disabled={loading || generatingDescription || generatingCover}
+                    disabled={loading || generatingDescription || generatingCover || uploadingPdf || uploadingCover}
                     className="w-full px-6 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold rounded-xl transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 shadow-lg shadow-indigo-500/25 flex items-center justify-center space-x-2"
                   >
                     {loading ? (
@@ -301,6 +488,42 @@ export default function AddBook() {
                     <p className="text-sm">No cover generated yet</p>
                     <p className="text-xs mt-1">Generate or upload a cover image</p>
                   </div>
+                )}
+              </div>
+
+              {/* Cover Upload Section */}
+              <div className="mb-4">
+                <label className="block text-slate-700 text-sm font-semibold mb-2">
+                  Upload Cover Image
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleCoverFileSelect}
+                  className="w-full px-3 py-2 bg-white/80 border border-slate-200 rounded-xl text-slate-700 text-sm file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 transition-all duration-200"
+                />
+                
+                {coverFile && (
+                  <button
+                    type="button"
+                    onClick={handleCoverUpload}
+                    disabled={uploadingCover}
+                    className="mt-3 w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                  >
+                    {uploadingCover ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <span>Uploading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        <span>Upload Cover</span>
+                      </>
+                    )}
+                  </button>
                 )}
               </div>
 
@@ -358,7 +581,7 @@ export default function AddBook() {
                   type="text"
                   id="coverUrl"
                   name="coverUrl"
-                  value={book.coverUrl}
+                  value={book.coverUrl.startsWith('blob:') ? '' : book.coverUrl}
                   onChange={handleChange}
                   placeholder="https://example.com/cover.jpg"
                   className="w-full px-4 py-3 bg-white/80 border border-slate-200 rounded-xl text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 shadow-sm"
@@ -370,4 +593,4 @@ export default function AddBook() {
       </div>
     </div>
   );
-}
+} 
