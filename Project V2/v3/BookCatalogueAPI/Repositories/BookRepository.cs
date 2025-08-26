@@ -1,4 +1,4 @@
-// BookRepository.cs (Implementation)
+// BookRepository.cs (Updated Implementation)
 using BookCatalogueAPI.Data;
 using BookCatalogueAPI.Interfaces;
 using BookCatalogueAPI.Models;
@@ -22,6 +22,15 @@ namespace BookCatalogueAPI.Repositories
                 .ToListAsync();
         }
 
+        public async Task<IEnumerable<Book>> GetBooksByUserIdAsync(int userId)
+        {
+            return await _context.Book
+                .Where(b => b.UserId == userId)
+                .Include(b => b.BookAuthors).ThenInclude(ba => ba.Author)
+                .Include(b => b.BookGenres).ThenInclude(bg => bg.Genre)
+                .ToListAsync();
+        }
+
         public async Task<Book?> GetBookByIdAsync(int id)
         {
             return await _context.Book
@@ -29,6 +38,16 @@ namespace BookCatalogueAPI.Repositories
                 .Include(b => b.BookGenres).ThenInclude(bg => bg.Genre)
                 .Include(b => b.BookMoods).ThenInclude(bm => bm.Mood)
                 .FirstOrDefaultAsync(b => b.Id == id);
+        }
+
+        public async Task<Book?> GetBookByIdAndUserIdAsync(int id, int userId)
+        {
+            return await _context.Book
+                .Where(b => b.Id == id && b.UserId == userId)
+                .Include(b => b.BookAuthors).ThenInclude(ba => ba.Author)
+                .Include(b => b.BookGenres).ThenInclude(bg => bg.Genre)
+                .Include(b => b.BookMoods).ThenInclude(bm => bm.Mood)
+                .FirstOrDefaultAsync();
         }
 
         public async Task AddBookAsync(Book book)
@@ -52,6 +71,11 @@ namespace BookCatalogueAPI.Repositories
         public async Task<bool> BookExistsAsync(string openLibraryId)
         {
             return await _context.Book.AnyAsync(b => b.OpenLibraryId == openLibraryId);
+        }
+
+        public async Task<bool> BookExistsForUserAsync(string openLibraryId, int userId)
+        {
+            return await _context.Book.AnyAsync(b => b.OpenLibraryId == openLibraryId && b.UserId == userId);
         }
     }
 }

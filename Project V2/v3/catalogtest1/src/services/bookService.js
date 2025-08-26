@@ -1,6 +1,8 @@
-import axios from 'axios';
-const API = "http://localhost:4540/api/books";
-export const getBooks = () => axios.get(API);
-export const addBook = book => axios.post(API, book);
-export const updateBook = (id, book) => axios.put(`${API}/${id}`, book);
-export const deleteBook = id => axios.delete(`${API}/${id}`);
+// src/services/bookService.js
+import api from "./axiosConfig";
+
+export const getBooks = () => api.get("/books");
+export const getBook = (id) => api.get(`/books/${id}`);
+export const addBook = (book) => api.post("/books", book);
+export const updateBook = (id, book) => api.put(`/books/${id}`, book);
+export const deleteBook = (id) => api.delete(`/books/${id}`);

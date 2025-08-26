@@ -197,6 +197,16 @@ User: Search for description of book 'Dune'
 }
 
 GET FIELD:
+User: Who is author of book Ready Player One
+{
+  "intent": "get_field",
+  "searchCriteria": {
+    "title": "Ready Player One"
+  },
+  "field": "authors"
+}
+
+
 User: Find authors of the book 'Dune'
 {
   "intent": "get_field",

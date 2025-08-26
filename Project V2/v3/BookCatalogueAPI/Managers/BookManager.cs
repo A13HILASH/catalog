@@ -2,6 +2,7 @@ using BookCatalogueAPI.Data;
 using BookCatalogueAPI.DTOs;
 using BookCatalogueAPI.Interfaces;
 using BookCatalogueAPI.Models;
+using Microsoft.EntityFrameworkCore;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -11,7 +12,7 @@ namespace BookCatalogueAPI.Managers
     public class BookManager : IBookManager
     {
         private readonly IBookRepository _bookRepository;
-        private readonly AppDbContext _context; // Injecting AppDbContext to get authors and genres
+        private readonly AppDbContext _context;
 
         public BookManager(IBookRepository bookRepository, AppDbContext context)
         {
@@ -19,9 +20,9 @@ namespace BookCatalogueAPI.Managers
             _context = context;
         }
 
-        public async Task<IEnumerable<BookListItemDto>> GetAllBooksAsync()
+        public async Task<IEnumerable<BookListItemDto>> GetAllBooksAsync(int userId)
         {
-            var books = await _bookRepository.GetAllBooksAsync();
+            var books = await _bookRepository.GetBooksByUserIdAsync(userId);
             return books.Select(b => new BookListItemDto
             {
                 Id = b.Id,
@@ -36,9 +37,9 @@ namespace BookCatalogueAPI.Managers
             }).ToList();
         }
 
-        public async Task<BookDetailsDto?> GetBookByIdAsync(int id)
+        public async Task<BookDetailsDto?> GetBookByIdAsync(int id, int userId)
         {
-            var book = await _bookRepository.GetBookByIdAsync(id);
+            var book = await _bookRepository.GetBookByIdAndUserIdAsync(id, userId);
             if (book == null)
             {
                 return null;
@@ -59,10 +60,11 @@ namespace BookCatalogueAPI.Managers
             };
         }
 
-        public async Task<BookDetailsDto> CreateBookAsync(BookDto bookDto)
+        public async Task<BookDetailsDto> CreateBookAsync(BookDto bookDto, int userId)
         {
             var book = new Book
             {
+                UserId = userId,
                 Title = bookDto.Title,
                 Year = bookDto.Year,
                 CoverUrl = bookDto.CoverUrl,
@@ -74,43 +76,44 @@ namespace BookCatalogueAPI.Managers
                 BookMoods = new List<BookMood>()
             };
 
-            var authorNames = bookDto.Authors.Split(',').Select(a => a.Trim()).ToList();
+            // Process Authors
+            var authorNames = bookDto.Authors.Split(',').Select(a => a.Trim()).Where(a => !string.IsNullOrEmpty(a)).ToList();
             foreach (var authorName in authorNames)
             {
-                var author = _context.Author.FirstOrDefault(a => a.Name == authorName);
+                var author = await _context.Author.FirstOrDefaultAsync(a => a.Name == authorName && a.UserId == userId);
                 if (author == null)
                 {
-                    author = new Author { Name = authorName };
+                    author = new Author { Name = authorName, UserId = userId };
                     _context.Author.Add(author);
                 }
                 book.BookAuthors.Add(new BookAuthor { Author = author });
             }
 
-            var genreNames = bookDto.Genres.Split(',').Select(g => g.Trim()).ToList();
+            // Process Genres
+            var genreNames = bookDto.Genres.Split(',').Select(g => g.Trim()).Where(g => !string.IsNullOrEmpty(g)).ToList();
             foreach (var genreName in genreNames)
             {
-                var genre = _context.Genre.FirstOrDefault(g => g.Name == genreName);
+                var genre = await _context.Genre.FirstOrDefaultAsync(g => g.Name == genreName && g.UserId == userId);
                 if (genre == null)
                 {
-                    genre = new Genre { Name = genreName };
+                    genre = new Genre { Name = genreName, UserId = userId };
                     _context.Genre.Add(genre);
                 }
                 book.BookGenres.Add(new BookGenre { Genre = genre });
             }
             
-            // New logic to handle Moods from DTO
-            var moodNames = bookDto.Moods.Split(',').Select(m => m.Trim()).ToList();
+            // Process Moods
+            var moodNames = bookDto.Moods.Split(',').Select(m => m.Trim()).Where(m => !string.IsNullOrEmpty(m)).ToList();
             foreach (var moodName in moodNames)
             {
-                var mood = _context.Mood.FirstOrDefault(m => m.Name == moodName);
+                var mood = await _context.Mood.FirstOrDefaultAsync(m => m.Name == moodName && m.UserId == userId);
                 if (mood == null)
                 {
-                    mood = new Mood { Name = moodName };
+                    mood = new Mood { Name = moodName, UserId = userId };
                     _context.Mood.Add(mood);
                 }
                 book.BookMoods.Add(new BookMood { Mood = mood });
             }
-
 
             await _bookRepository.AddBookAsync(book);
             
@@ -129,12 +132,12 @@ namespace BookCatalogueAPI.Managers
             };
         }
         
-        public async Task UpdateBookAsync(int id, BookDto bookDto)
+        public async Task UpdateBookAsync(int id, BookDto bookDto, int userId)
         {
-            var existingBook = await _bookRepository.GetBookByIdAsync(id);
+            var existingBook = await _bookRepository.GetBookByIdAndUserIdAsync(id, userId);
             if (existingBook == null)
             {
-                throw new KeyNotFoundException($"Book with ID {id} not found.");
+                throw new KeyNotFoundException($"Book with ID {id} not found for user.");
             }
 
             existingBook.Title = bookDto.Title;
@@ -143,42 +146,45 @@ namespace BookCatalogueAPI.Managers
             existingBook.BookUrl = bookDto.BookUrl;
             existingBook.Description = bookDto.Description;
 
+            // Clear existing relationships
             existingBook.BookAuthors.Clear();
             existingBook.BookGenres.Clear();
-            existingBook.BookMoods.Clear(); // Clear existing moods
+            existingBook.BookMoods.Clear();
 
-            var authorNames = bookDto.Authors.Split(',').Select(a => a.Trim()).ToList();
+            // Process Authors
+            var authorNames = bookDto.Authors.Split(',').Select(a => a.Trim()).Where(a => !string.IsNullOrEmpty(a)).ToList();
             foreach (var authorName in authorNames)
             {
-                var author = _context.Author.FirstOrDefault(a => a.Name == authorName);
+                var author = await _context.Author.FirstOrDefaultAsync(a => a.Name == authorName && a.UserId == userId);
                 if (author == null)
                 {
-                    author = new Author { Name = authorName };
+                    author = new Author { Name = authorName, UserId = userId };
                     _context.Author.Add(author);
                 }
                 existingBook.BookAuthors.Add(new BookAuthor { Author = author });
             }
 
-            var genreNames = bookDto.Genres.Split(',').Select(g => g.Trim()).ToList();
+            // Process Genres
+            var genreNames = bookDto.Genres.Split(',').Select(g => g.Trim()).Where(g => !string.IsNullOrEmpty(g)).ToList();
             foreach (var genreName in genreNames)
             {
-                var genre = _context.Genre.FirstOrDefault(g => g.Name == genreName);
+                var genre = await _context.Genre.FirstOrDefaultAsync(g => g.Name == genreName && g.UserId == userId);
                 if (genre == null)
                 {
-                    genre = new Genre { Name = genreName };
+                    genre = new Genre { Name = genreName, UserId = userId };
                     _context.Genre.Add(genre);
                 }
                 existingBook.BookGenres.Add(new BookGenre { Genre = genre });
             }
 
-            // New logic to handle Moods from DTO
-            var moodNames = bookDto.Moods.Split(',').Select(m => m.Trim()).ToList();
+            // Process Moods
+            var moodNames = bookDto.Moods.Split(',').Select(m => m.Trim()).Where(m => !string.IsNullOrEmpty(m)).ToList();
             foreach (var moodName in moodNames)
             {
-                var mood = _context.Mood.FirstOrDefault(m => m.Name == moodName);
+                var mood = await _context.Mood.FirstOrDefaultAsync(m => m.Name == moodName && m.UserId == userId);
                 if (mood == null)
                 {
-                    mood = new Mood { Name = moodName };
+                    mood = new Mood { Name = moodName, UserId = userId };
                     _context.Mood.Add(mood);
                 }
                 existingBook.BookMoods.Add(new BookMood { Mood = mood });
@@ -187,18 +193,18 @@ namespace BookCatalogueAPI.Managers
             await _bookRepository.UpdateBookAsync(existingBook);
         }
 
-        public async Task DeleteBookAsync(int id)
+        public async Task DeleteBookAsync(int id, int userId)
         {
-            var book = await _bookRepository.GetBookByIdAsync(id);
+            var book = await _bookRepository.GetBookByIdAndUserIdAsync(id, userId);
             if (book != null)
             {
                 await _bookRepository.DeleteBookAsync(book);
             }
         }
         
-        public async Task<bool> BookExistsAsync(string openLibraryId)
+        public async Task<bool> BookExistsAsync(string openLibraryId, int userId)
         {
-            return await _bookRepository.BookExistsAsync(openLibraryId);
+            return await _bookRepository.BookExistsForUserAsync(openLibraryId, userId);
         }
     }
 }

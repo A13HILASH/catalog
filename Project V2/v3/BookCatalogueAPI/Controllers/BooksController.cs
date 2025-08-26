@@ -1,12 +1,15 @@
 ﻿using BookCatalogueAPI.DTOs;
 using BookCatalogueAPI.Interfaces;
 using BookCatalogueAPI.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace BookCatalogueAPI.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]
     public class BooksController : ControllerBase
     {
         private readonly IBookManager _bookManager;
@@ -19,14 +22,16 @@ namespace BookCatalogueAPI.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<BookListItemDto>>> Get()
         {
-            var books = await _bookManager.GetAllBooksAsync();
+            var userId = GetCurrentUserId();
+            var books = await _bookManager.GetAllBooksAsync(userId);
             return Ok(books);
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<BookDetailsDto>> Get(int id)
         {
-            var book = await _bookManager.GetBookByIdAsync(id);
+            var userId = GetCurrentUserId();
+            var book = await _bookManager.GetBookByIdAsync(id, userId);
             if (book == null)
             {
                 return NotFound();
@@ -37,13 +42,15 @@ namespace BookCatalogueAPI.Controllers
         [HttpPost]
         public async Task<ActionResult<BookDetailsDto>> Post(BookDto bookDto)
         {
+            var userId = GetCurrentUserId();
+            
             if (!string.IsNullOrEmpty(bookDto.OpenLibraryId)
-                && await _bookManager.BookExistsAsync(bookDto.OpenLibraryId))
+                && await _bookManager.BookExistsAsync(bookDto.OpenLibraryId, userId))
             {
-                return Conflict("Book already exists.");
+                return Conflict("Book already exists in your catalog.");
             }
 
-            var newBook = await _bookManager.CreateBookAsync(bookDto);
+            var newBook = await _bookManager.CreateBookAsync(bookDto, userId);
             return CreatedAtAction(nameof(Get), new { id = newBook.Id }, newBook);
         }
 
@@ -52,7 +59,8 @@ namespace BookCatalogueAPI.Controllers
         {
             try
             {
-                await _bookManager.UpdateBookAsync(id, bookDto);
+                var userId = GetCurrentUserId();
+                await _bookManager.UpdateBookAsync(id, bookDto, userId);
                 return NoContent();
             }
             catch (KeyNotFoundException)
@@ -64,8 +72,19 @@ namespace BookCatalogueAPI.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)
         {
-            await _bookManager.DeleteBookAsync(id);
+            var userId = GetCurrentUserId();
+            await _bookManager.DeleteBookAsync(id, userId);
             return NoContent();
+        }
+
+        private int GetCurrentUserId()
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+            {
+                throw new UnauthorizedAccessException("Invalid user token.");
+            }
+            return userId;
         }
     }
 }
